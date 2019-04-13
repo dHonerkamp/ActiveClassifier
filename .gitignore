@@ -1,0 +1,15 @@
+# Byte-compiled / optimized / DLL files
+*.py[cod]
+*.idea/
+
+# Directories
+deployment/
+logs/
+data/
+
+# Tex files
+*.log
+*.aux
+*.out
+.toc
+*.synctex.gz

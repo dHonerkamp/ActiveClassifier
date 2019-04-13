@@ -65,7 +65,10 @@ class Utility(object):
             experiment_name += '_uk{}_{}'.format(FLAGS.num_uk_train, FLAGS.num_uk_test)
 
         if platform != 'win32':
-            experiment_name += '_frzEnc{}_frzPol{}'.format(FLAGS.freeze_enc, FLAGS.freeze_policyNet)
+            if FLAGS.freeze_enc:
+                experiment_name += '_frzEnc{}'.format(FLAGS.freeze_enc)
+            if FLAGS.freeze_policyNet:
+                experiment_name += '_frzPol{}'.format(FLAGS.freeze_policyNet)
 
         name = os.path.join(FLAGS.exp_folder, experiment_name)
         logging.info('CURRENT MODEL: ' + name + '\n')
@@ -84,7 +87,7 @@ class Utility(object):
 
         # paths and boring stuff
         # parser.add_argument('--start_checkpoint', type=str, default='', help='CLOSE TENSORBOARD! If specified, restore this pre-trained model before any training.')
-        parser.add_argument('--exp_folder', type=str, default='', help="Used for log folder.")
+        parser.add_argument('-f', '--exp_folder', type=str, default='', help="Used for log folder.")
         parser.add_argument('--full_summary', type=int, default=0, choices=[0, 1], help='Include all gradients and variables in summary.')
         parser.add_argument('--data_dir', type=str, default='data/', help="Where the data is stored")
         parser.add_argument('--summaries_dir', type=str, default='logs', help='Where to save summary logs for TensorBoard.')

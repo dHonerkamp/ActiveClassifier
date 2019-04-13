@@ -61,6 +61,8 @@ class Utility(object):
                 FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples, FLAGS.pre_train_epochs,
                 FLAGS.learning_rate_decay_factor, FLAGS.learning_rate,
                 len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.loc_std, FLAGS.gl_std, FLAGS.size_z, FLAGS.normalise_fb)
+        if FLAGS.use_conv:
+            experiment_name += '_CNN'
         if FLAGS.uk_folds:
             experiment_name += '_uk{}_{}'.format(FLAGS.num_uk_train, FLAGS.num_uk_test)
 
@@ -105,9 +107,9 @@ class Utility(object):
         parser.add_argument('--min_learning_rate', type=float, default=0.0001, help='Minimal learning rate.')
         # parser.add_argument('--learning_rate_RL', type=float, default=1, help='Relative weight of the RL objective.')
         # standard parameters
-        parser.add_argument('--batch_size', type=int, default=64, help='How many items to train with at once.')
+        parser.add_argument('-b', '--batch_size', type=int, default=64, help='How many items to train with at once.')
         parser.add_argument('--MC_samples', type=int, default=10, help='Number of Monte Carlo Samples per image.')
-        parser.add_argument('--num_epochs', type=int, default=8, help='Number of training epochs.')
+        parser.add_argument('-e', '--num_epochs', type=int, default=8, help='Number of training epochs.')
         parser.add_argument('--pre_train_epochs', type=int, default=0, help='Number of epochs to train generative model only on random locations.')
         parser.add_argument('--freeze_enc', type=int, default=None, help='Number of epochs after which to freeze the encoder weights. Set to None to ignore.')
         parser.add_argument('--freeze_policyNet', type=int, default=None, help='Number of epochs after which to freeze the policyNet weights. Set to None to ignore.')

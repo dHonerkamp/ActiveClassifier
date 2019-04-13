@@ -17,9 +17,11 @@ def evaluate(FLAGS, sess, model, feed, num_batches, writer, visual=None):
              'metrics'            : model.metrics_update,
              'phase'              : model.phase,
              'y_MC'               : model.y_MC,
+             'clf'                : model.classification,
              'fb'                 : model.fb,
+             'state_believes'     : model.state_believes,
              }
-    batch_values = {k: None for k in ['y_MC', 'fb']}
+    batch_values = {k: None for k in ['y_MC', 'clf', 'fb', 'state_believes']}
 
     for i in range(num_batches):
         out = sess.run(fetch, feed_dict=feed)
@@ -33,7 +35,9 @@ def evaluate(FLAGS, sess, model, feed, num_batches, writer, visual=None):
 
     if visual is not None:
         batch_values['y'] = batch_values['y_MC']
-        visual.plot_fb(batch_values, suffix='_' + writer.get_logdir().split('/')[-1])
+        sfx = '_' + writer.get_logdir().split('/')[-1]
+        visual.plot_fb(batch_values, suffix=sfx)
+        visual.plot_stateBelieves(batch_values, suffix=sfx)
 
     prefix = writer.get_logdir().split('/')[-1].upper() + ':'
     strs = [item for pair in zip(model.metrics_names, out["metrics"]) for item in pair]

@@ -113,10 +113,11 @@ def main():
         logging.info('Starting phase {}.'.format(phase['name']))
         tf.reset_default_graph()
 
-        if FLAGS.uk_label and (phase['incl_uk'] is False):
+        if FLAGS.uk_label and (phase['incl_uk'] == 0):
             x, y = train_data
             is_uk = (y == FLAGS.uk_label)
             train_data = (x[~is_uk], y[~is_uk])
+            FLAGS.train_data_shape = (train_data[0].shape, train_data[1].shape)  # re-adjust
 
         with tf.Session(config=config) as sess:
             # Initialise env and model

@@ -91,7 +91,7 @@ class PredErrorUpdate(BeliefUpdate):
             surprise = tf.reduce_min(avg_fb, axis=1, keep_dims=True)  # best fb across hyp
 
             with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
-                uk_belief_logits = tf.layers.dense(tf.stop_gradient(surprise), units=1, activation=None, name='uk_belief')
+                uk_belief_logits = tf.layers.dense(tf.stop_gradient(surprise), units=1, activation=None, bias_initializer=tf.constant_initializer(-6), name='uk_belief')
                 uk_belief_logits = tf.squeeze(uk_belief_logits, 1)
                 current_state['uk_belief'] = tf.stop_gradient(tf.nn.sigmoid(uk_belief_logits))
         else:

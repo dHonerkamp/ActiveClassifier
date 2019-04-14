@@ -57,8 +57,9 @@ class Utility(object):
 
     @staticmethod
     def set_exp_name(FLAGS):
-        experiment_name = '{}gl_{}_{}_bs{}_MC{}_preTr{}_dcay{}_lr{}_{}sc{}_lstd{}_glstd{}_z{}_fbN{}'.format(
-                FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples, FLAGS.pre_train_epochs,
+        experiment_name = '{}gl_{}_{}_bs{}_MC{}_preTr{}{}{}_dcay{}_lr{}_{}sc{}_lstd{}_glstd{}_z{}_fbN{}'.format(
+                FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples,
+                FLAGS.pre_train_policy, FLAGS.pre_train_epochs, FLAGS.pre_train_uk,
                 FLAGS.learning_rate_decay_factor, FLAGS.learning_rate,
                 len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.loc_std, FLAGS.gl_std, FLAGS.size_z, FLAGS.normalise_fb)
         if FLAGS.use_conv:
@@ -101,6 +102,7 @@ class Utility(object):
         # parser.add_argument('--folds', type=int, default=1, help='How often to run the model. uk_folds takes precedence.')
         # parser.add_argument('--f_vis', type=int, default=5, help='Stop visualizing and checkpointing after this many folds.')
         parser.add_argument('--visualisation_level', type=int, default=2, choices=[0, 1, 2], help='Level of visuals / plots to be produced. 2: all plots, 0: no plots.')
+        parser.add_argument('--eval_step_interval', type=int, default=1, help='How often to evaluate the training results. In epochs.')
         # learning rates
         parser.add_argument('--learning_rate', type=float, default=0.001, help='How large a learning rate to use when training.')
         parser.add_argument('--learning_rate_decay_factor', type=float, default=0.97, help='1 for no decay.')
@@ -111,11 +113,12 @@ class Utility(object):
         parser.add_argument('--MC_samples', type=int, default=10, help='Number of Monte Carlo Samples per image.')
         parser.add_argument('-e', '--num_epochs', type=int, default=8, help='Number of training epochs.')
         parser.add_argument('--pre_train_epochs', type=int, default=0, help='Number of epochs to train generative model only on random locations.')
+        parser.add_argument('--pre_train_policy', type=str, default='same', choices=['same', 'random', 'ActInf', 'RL'], help="Pretrain policy. 'Same' to use same as main phase.")
+        parser.add_argument('--pre_train_uk', type=int, default=1, choices=[0, 1], help='Whether to include uks during pretrain phase.')
         parser.add_argument('--freeze_enc', type=int, default=None, help='Number of epochs after which to freeze the encoder weights. Set to None to ignore.')
         parser.add_argument('--freeze_policyNet', type=int, default=None, help='Number of epochs after which to freeze the policyNet weights. Set to None to ignore.')
-        parser.add_argument('--eval_step_interval', type=int, default=1, help='How often to evaluate the training results. In epochs.')
         # locations
-        parser.add_argument('--max_loc_rng', type=float, default=0.6, help='In what range are the locations allowed to fall? (Max. is -1 to 1)')
+        parser.add_argument('--max_loc_rng', type=float, default=1., help='In what range are the locations allowed to fall? (Max. is -1 to 1)')
         parser.add_argument('--loc_std', type=float, default=0.09, help='Std used to sample locations. Relative to whole image being in range (-1, 1).')
         # parser.add_argument('--loc_encoding', type=str, default='cartFiLM', choices=["cartOrig", "cartFiLM", "cartRel", "polarRel"],
         #     help='cartOrig: (x, y), glNet: additive'

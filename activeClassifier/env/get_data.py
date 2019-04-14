@@ -56,6 +56,7 @@ def create_class_mapping_ukMax(num_classes, uks):
         reverse_mapping = {}  # to display the correct original label in visualisation, uk = -1
 
         new_num_classes = num_classes - (len(uks) - 1)
+        new_num_classes_kn = new_num_classes - 1
         uk_label = new_num_classes - 1 # -1 because of zero-indexing
 
         for c in range(num_classes):
@@ -67,11 +68,12 @@ def create_class_mapping_ukMax(num_classes, uks):
                 mapping[c] = c - smaller_uks
                 reverse_mapping[c - smaller_uks] = c
     else:
+        new_num_classes, new_num_classes_kn = num_classes, num_classes
         mapping, uk_label = None, None
         reverse_mapping = {c: c for c in range(num_classes)}
 
     reverse_mapping[-1] = 'No dec'  # clf outputs -1 if no classification decision is made
-    return mapping, reverse_mapping, uk_label
+    return mapping, reverse_mapping, uk_label, new_num_classes, new_num_classes_kn
 
 
 def remove_labels(x, y, labels):
@@ -103,14 +105,10 @@ def move_unknowns_into_test_set(FLAGS, train, valid, test):
         test_x, test_y   = remove_labels(test_x, test_y, FLAGS.uk_train_labels)
         valid_x, valid_y = remove_labels(valid_x, valid_y, FLAGS.uk_train_labels)
 
-    class_mapping, label_remapping, uk_label = create_class_mapping_ukMax(FLAGS.num_classes, uks)
+    class_mapping, label_remapping, uk_label, FLAGS.num_classes, FLAGS.num_classes_kn = create_class_mapping_ukMax(FLAGS.num_classes, uks)
     train_y = np.vectorize(class_mapping.get)(train_y)
     valid_y = np.vectorize(class_mapping.get)(valid_y)
     test_y  = np.vectorize(class_mapping.get)(test_y)
-
-    # adjust num_classes
-    FLAGS.num_classes -= (len(uks) - 1)
-    FLAGS.num_classes_kn = FLAGS.num_classes - 1
 
     return  (train_x, train_y), (valid_x, valid_y), (test_x, test_y), label_remapping, uk_label
 
@@ -187,7 +185,7 @@ def get_data(FLAGS):
 
         # uk will be an additional class with the highest label
         FLAGS.num_classes += 1
-        _, FLAGS.class_remapping, FLAGS.uk_label = create_class_mapping_ukMax(FLAGS.num_classes, uks=[FLAGS.num_classes])
+        _, FLAGS.class_remapping, FLAGS.uk_label, FLAGS.num_classes, FLAGS.num_classes_kn = create_class_mapping_ukMax(FLAGS.num_classes, uks=[FLAGS.num_classes])
 
         # add resized OMNIGLOT as unknowns to train and validation set
         def get_uk_y(length):
@@ -214,13 +212,22 @@ def get_data(FLAGS):
     elif FLAGS.dataset  == 'MNIST_OMNI_notMNIST':
         pass
     else:
-        _, FLAGS.class_remapping, FLAGS.uk_label = create_class_mapping_ukMax(FLAGS.num_classes, uks=[])
+        _, FLAGS.class_remapping, FLAGS.uk_label, FLAGS.num_classes, FLAGS.num_classes_kn = create_class_mapping_ukMax(FLAGS.num_classes, uks=[])
 
     logging.info("Obs per dataset: {}, {}, {}".format(len(train[0]), len(valid[0]), len(test[0])))
     logging.info('(Adapted) labels per set (uk = {}):\n'
                  'train: {}\n'
                  'valid: {}\n'
-                 'test:  {}'.format(FLAGS.uk_label, set(train[1]), set(valid[1]), set(test[1])))
+                 'test:  {}\n'
+                 'total classes: {}, kn classes: {}'.format(FLAGS.uk_label, set(train[1]), set(valid[1]), set(test[1]), FLAGS.num_classes, FLAGS.num_classes_kn))
+
+    # ensure flags are set correctly
+    assert FLAGS.num_classes - FLAGS.num_classes_kn in [0, 1]
+    assert FLAGS.num_classes == len(set(train[1]))
+    if FLAGS.uk_label:
+        assert FLAGS.num_classes_kn == len(set(train[1])) - 1
+    else:
+        assert FLAGS.num_classes_kn == len(set(train[1]))
 
     FLAGS.train_batches_per_epoch = np.ceil(train[0].shape[0] / FLAGS.batch_size).astype(int)
     FLAGS.batches_per_eval_valid  = np.ceil(valid[0].shape[0] / FLAGS.batch_size).astype(int)

@@ -66,6 +66,8 @@ class Utility(object):
             experiment_name += '_CNN'
         if FLAGS.uk_folds:
             experiment_name += '_uk{}_{}'.format(FLAGS.num_uk_train, FLAGS.num_uk_test)
+        if FLAGS.binarize_MNIST:
+            experiment_name += '_binar'
 
         if platform != 'win32':
             if FLAGS.freeze_enc:
@@ -225,6 +227,9 @@ class Utility(object):
         resz = (str(FLAGS.img_resize if FLAGS.img_resize else ""))
         FLAGS.path = os.path.join(FLAGS.summaries_dir, FLAGS.dataset + t_sz + resz, experiment_name)
         os.makedirs(FLAGS.path, exist_ok=True)
+
+        with open(os.path.join(FLAGS.path, 'argparse.txt'),'w+') as f:
+            f.write(' '.join(sys.argv))
 
         config = tf.ConfigProto()
         config.allow_soft_placement = True

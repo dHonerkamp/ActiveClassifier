@@ -82,7 +82,7 @@ def input_fn(FLAGS, batch_sz):
     tr_data    = pipeline((features_ph_train, labels_ph_train), batch_sz, FLAGS, repeats=tf.cast(tf.ceil(FLAGS.num_epochs + FLAGS.num_epochs / FLAGS.eval_step_interval), tf.int64), shuffle=True, n=FLAGS.train_data_shape[0][0])
     # repeats * 2 because also used for visualization etc.
     valid_data = pipeline((features_ph_valid, labels_ph_valid), batch_sz, FLAGS, repeats=tf.cast(tf.ceil(20 *  FLAGS.num_epochs / FLAGS.eval_step_interval), tf.int64), shuffle=False, n=FLAGS.valid_data_shape[0][0])
-    test_data  = pipeline((features_ph_test, labels_ph_test), batch_sz, FLAGS, repeats=1 + tf.ceil(FLAGS.num_epochs / FLAGS.eval_step_interval), shuffle=False, n=FLAGS.test_data_shape[0][0])
+    test_data  = pipeline((features_ph_test, labels_ph_test), batch_sz, FLAGS, repeats=tf.cast(1 + tf.ceil(FLAGS.num_epochs / FLAGS.eval_step_interval), tf.int64), shuffle=False, n=FLAGS.test_data_shape[0][0])
     if FLAGS.img_resize:
         FLAGS.img_shape[0:2] = 2 * [FLAGS.img_resize]
     if FLAGS.translated_size:

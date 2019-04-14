@@ -68,9 +68,9 @@ class Utility(object):
 
         if platform != 'win32':
             if FLAGS.freeze_enc:
-                experiment_name += '_frzEnc{}'.format(FLAGS.freeze_enc)
+                experiment_name += '_frzEnc'
             if FLAGS.freeze_policyNet:
-                experiment_name += '_frzPol{}'.format(FLAGS.freeze_policyNet)
+                experiment_name += '_frzPol'
 
         name = os.path.join(FLAGS.exp_folder, experiment_name)
         logging.info('CURRENT MODEL: ' + name + '\n')

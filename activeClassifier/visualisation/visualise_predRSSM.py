@@ -33,17 +33,16 @@ class Visualization_predRSSM(Base):
                       'reconstr_prior'  : model.reconstr_prior,
                       'KLdivs'          : model.KLdivs,
                       'fb'              : model.fb,
+                      'uk_belief'       : model.uk_belief
                       }
 
         if self.visualisation_level > 0:
             folders = ['glimpses', 'reconstr']
 
-            if FLAGS.uk_label is not None:
-                self.fetch.update({'uk_belief': model.uk_belief, })
-
             if self.visualisation_level > 1:
                 folders.append('fb')
                 folders.append('c')
+
             #     if (self.planner != 'RL'):
             #         folders.append('planning')
             #
@@ -87,7 +86,15 @@ class Visualization_predRSSM(Base):
         gl_post = self._scale_reshp(d['reconstr_posterior'])  # [T, B, scale[0], scales*scale[0]]
         gl_preds = self._scale_reshp(d['reconstr_prior'])  # [T, B, hyp, scale[0], scales*scale[0]]
 
-        for i in range(nr_examples):
+        idx_examples =list(range(nr_examples))
+
+        if self.uk_label is not None:  # ensure at least 2 uk examples
+            is_uk = (d['y'] == self.uk_label)
+            idx_uk = np.arange(self.batch_size_eff)[is_uk]
+            idx_examples += list(idx_uk[:2])
+            idx_examples = np.unique(idx_examples)
+
+        for i in idx_examples:
             f, axes = plt.subplots(self.num_glimpses + 1, nax, figsize=(4 * self.num_scales * nax, 4 * (self.num_glimpses + 1)))
             axes    = axes.reshape([self.num_glimpses + 1, nax])
             self._plot_img_plus_locs(axes[0, 0], d['x'][i], d['y'][i], d['clf'][i], d['locs'][:, i, :], d['decisions'][:, i])
@@ -113,9 +120,9 @@ class Visualization_predRSSM(Base):
                         c = get_title_color(d['state_believes'][t+1, i, :], hyp)
                         axes[t+1, j+2].set_title('{}, p: {:.2f}, KL: {:.2f}, post-c: {:.2f}'.format(self.lbl_map[hyp], ps[hyp], d['KLdivs'][t, i, hyp], d['state_believes'][t+1, i, hyp]), color=c)
 
-            # plt.setp(axes, xticks=[], yticks=[])
             [ax.set_axis_off() for ax in axes.ravel()]
-            self._save_fig(f, folder_name, '{}{}_n{}.png'.format(self.prefix, suffix, i))
+            self._save_fig(f, folder_name, '{}{}_n{}{isuk}.png'.format(self.prefix, suffix, i,
+                                                                       isuk='_uk' if (self.uk_label is not None) and (i in idx_uk) else ''))
 
     def plot_fb(self, d, suffix=''):
         def fb_hist(fb1, fb2, ax, title, add_legend):

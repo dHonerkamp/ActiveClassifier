@@ -3,9 +3,9 @@
 *.idea/
 
 # Directories
-deployment/
-logs/
-data/
+activeClassifier/deployment/
+activeClassifier/logs/
+activeClassifier/data/
 
 # Tex files
 *.log

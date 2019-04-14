@@ -1,5 +1,4 @@
 import logging
-import copy
 import re
 import numpy as np
 
@@ -9,12 +8,14 @@ from env.notMNIST import notMNIST
 from env.omniglot import get_omni_small, get_OMNIGLOT
 
 ### Unknown FLAGS
+## When masking parts of a single dataset:
 # FLAGS.num_uk_test: int, generates FLAGS.uk_test_labels
 # FLAGS.uk_test_labels: list of uk labels
 # FLAGS.uk_test_labels_used: int, how many unknowns to keep
 # FLAGS.num_uk_train: int, generates FLAGS.uk_train_labels
 # FLAGS.uk_train_labels: list of uk labels
-
+## Using uks from different datasets (MNIST_OMNI_notMNIST dataset):
+# FLAGS.uk_pct: share of the dataset to be added as uks (resulting total observations = 100*(1 + uk_pct)%
 
 # def create_class_mapping_uk0(num_classes, uks):
 #     uks = np.array(uks)
@@ -49,21 +50,25 @@ def random_uk_selection(FLAGS, num_classes):
 
 
 def create_class_mapping_ukMax(num_classes, uks):
-    uks = np.array(uks)
-    mapping = {}
-    reverse_mapping = {}  # to display the correct original label in visualisation, uk = -1
+    if uks:
+        uks = np.array(uks)
+        mapping = {}
+        reverse_mapping = {}  # to display the correct original label in visualisation, uk = -1
 
-    new_num_classes = num_classes - (len(uks) - 1)
-    uk_label = new_num_classes - 1 # -1 because of zero-indexing
+        new_num_classes = num_classes - (len(uks) - 1)
+        uk_label = new_num_classes - 1 # -1 because of zero-indexing
 
-    for c in range(num_classes):
-        if c in uks:
-            mapping[c] = uk_label
-            reverse_mapping[uk_label] = 'uk'
-        else:
-            smaller_uks = (uks < c).sum()
-            mapping[c] = c - smaller_uks
-            reverse_mapping[c - smaller_uks] = c
+        for c in range(num_classes):
+            if c in uks:
+                mapping[c] = uk_label
+                reverse_mapping[uk_label] = 'uk'
+            else:
+                smaller_uks = (uks < c).sum()
+                mapping[c] = c - smaller_uks
+                reverse_mapping[c - smaller_uks] = c
+    else:
+        mapping, uk_label = None, None
+        reverse_mapping = {c: c for c in range(num_classes)}
 
     reverse_mapping[-1] = 'No dec'  # clf outputs -1 if no classification decision is made
     return mapping, reverse_mapping, uk_label
@@ -98,7 +103,7 @@ def move_unknowns_into_test_set(FLAGS, train, valid, test):
         test_x, test_y   = remove_labels(test_x, test_y, FLAGS.uk_train_labels)
         valid_x, valid_y = remove_labels(valid_x, valid_y, FLAGS.uk_train_labels)
 
-    class_mapping, label_remapping, FLAGS.uk_label = create_class_mapping_ukMax(FLAGS.num_classes, uks)
+    class_mapping, label_remapping, uk_label = create_class_mapping_ukMax(FLAGS.num_classes, uks)
     train_y = np.vectorize(class_mapping.get)(train_y)
     valid_y = np.vectorize(class_mapping.get)(valid_y)
     test_y  = np.vectorize(class_mapping.get)(test_y)
@@ -107,7 +112,7 @@ def move_unknowns_into_test_set(FLAGS, train, valid, test):
     FLAGS.num_classes -= (len(uks) - 1)
     FLAGS.num_classes_kn = FLAGS.num_classes - 1
 
-    return  (train_x, train_y), (valid_x, valid_y), (test_x, test_y), label_remapping
+    return  (train_x, train_y), (valid_x, valid_y), (test_x, test_y), label_remapping, uk_label
 
 
 # def relabel_notOmniglot_knowns(labels, uk_test_labels, uk_train_labels):
@@ -174,36 +179,42 @@ def get_data(FLAGS):
         valid = (x_train[-10000:], y_train[-10000:])
     elif FLAGS.dataset == "omniglot":
         train, valid, test = get_OMNIGLOT(FLAGS, data_path)
-
-    # mask test unknowns to be label 0 and adjust all other labels
-    if (FLAGS.uk_test_labels) and (FLAGS.dataset != 'omniglot'):
-        train, valid, test, FLAGS.class_remapping = move_unknowns_into_test_set(FLAGS, train, valid, test)
-    else:
-        FLAGS.class_remapping = {c: c for c in range(FLAGS.num_classes)}
-
-    if FLAGS.dataset == 'MNIST_OMNI_notMNIST':
+    elif FLAGS.dataset == 'MNIST_OMNI_notMNIST':
         train, valid, test = get_MNIST(FLAGS)
-
-        len_tr    = int(FLAGS.uk_pct * train[0].shape[0])
+        len_tr = int(FLAGS.uk_pct * train[0].shape[0])
         len_valid = int(FLAGS.uk_pct * valid[0].shape[0])
-        len_test  = int(FLAGS.uk_pct * test[0].shape[0])
+        len_test = int(FLAGS.uk_pct * test[0].shape[0])
+
+        # uk will be an additional class with the highest label
+        FLAGS.num_classes += 1
+        _, FLAGS.class_remapping, FLAGS.uk_label = create_class_mapping_ukMax(FLAGS.num_classes, uks=[FLAGS.num_classes])
 
         # add resized OMNIGLOT as unknowns to train and validation set
+        def get_uk_y(length):
+            return np.full([length], FLAGS.uk_label, dtype=np.int32)
         omni_img = get_omni_small(FLAGS, data_path)
         train = (np.concatenate([train[0], omni_img[:len_tr]], axis=0),
-                 np.concatenate([train[1], np.zeros(len_tr, dtype=np.int32)], axis=0))
+                 np.concatenate([train[1], get_uk_y(len_tr)], axis=0))
         valid = (np.concatenate([valid[0], omni_img[len_tr:len_tr + len_valid]], axis=0),
-                 np.concatenate([valid[1], np.zeros(len_valid, dtype=np.int32)], axis=0))
+                 np.concatenate([valid[1], get_uk_y(len_valid)], axis=0))
 
         # add notMNIST as unknowns to test set
         notmnist = notMNIST(FLAGS.data_dir, test_only=True)
         notMNIST_x, _ = notmnist.test
         test = (np.concatenate([test[0], notMNIST_x[:len_test]], axis=0),
-                 np.concatenate([test[1], np.zeros(len_test, dtype=np.int32)], axis=0))
+                np.concatenate([test[1], get_uk_y(len_test)], axis=0))
 
         # assure FLAGS.uk_pct is not set so high that we don't have enough unknown observations
         assert (len_tr + len_valid) <= omni_img.shape[0]
         assert len_test <= notMNIST_x.shape[0]
+
+    # mask test unknowns to be label 0 and adjust all other labels
+    if (FLAGS.uk_test_labels) and (FLAGS.dataset != 'omniglot'):
+        train, valid, test, FLAGS.class_remapping, FLAGS.uk_label = move_unknowns_into_test_set(FLAGS, train, valid, test)
+    elif FLAGS.dataset  == 'MNIST_OMNI_notMNIST':
+        pass
+    else:
+        _, FLAGS.class_remapping, FLAGS.uk_label = create_class_mapping_ukMax(FLAGS.num_classes, uks=[])
 
     logging.info("Obs per dataset: {}, {}, {}".format(len(train[0]), len(valid[0]), len(test[0])))
     logging.info('(Adapted) labels per set (uk = {}):\n'

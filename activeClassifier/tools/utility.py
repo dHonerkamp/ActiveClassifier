@@ -155,6 +155,8 @@ class Utility(object):
                             help='List of labels to exclude from training set. None to ignore (0 means class 0!). '
                                  '(REMASKING FOR OMNIGLOT MIGHT NOT WORK ANYMORE, AS IT USED TO BE A NUMBER OF ALPHABETS IN THAT CASE).')
         parser.add_argument('--uk_train_labels', nargs='+', type=int, default=None, help='List of labels to set to unknown, but keep in training set. None to ignore.')
+        # use uks from different datasets (MNIST_OMNI_notMNIST dataset)
+        parser.add_argument('--uk_pct', type=float, default=0.3, help='Share of the dataset to be added as uks (resulting total observations = 100*(1 + uk_pct)%')
         # parser.add_argument('--uk_cycle_schedule', type=int, default=0, choices=[0, 1], help='Whether to use the "open sed schedule" from the thesis. Set uk_train_labels to 0!')
         # parser.add_argument('--num_uks_per_cycle', type=int, default=2, help='Number of classes to mask each epoch, if cycling.')
         # parser.add_argument('--punish_uk_wrong', type=float, default=0, help='If not 0: Reward of its value for not classifying an unknown as unknown.')

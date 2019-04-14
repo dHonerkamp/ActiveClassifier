@@ -1,7 +1,5 @@
 import tensorflow as tf
 
-from tools.tf_tools import create_MLP
-
 
 class PolicyNetwork:
     def __init__(self, FLAGS, batch_sz, n_policies, name='LocationNetwork'):

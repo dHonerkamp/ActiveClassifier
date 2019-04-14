@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow import distributions as tfd
 
 from models import base
-from tools.tf_tools import TINY, write_zero_out, repeat_axis, calculate_gaussian_nll
+from tools.tf_tools import write_zero_out, repeat_axis, calculate_gaussian_nll
 from modules.policyNetwork import PolicyNetwork
 from modules.VAE import Encoder, Decoder, GlimpseEncoder
 from modules.planner import ActInfPlanner, REINFORCEPlanner

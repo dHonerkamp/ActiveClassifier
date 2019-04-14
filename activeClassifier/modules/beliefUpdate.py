@@ -1,7 +1,6 @@
 import tensorflow as tf
 from tensorflow import distributions as tfd
 
-from tools.tf_tools import batch_min_normalization, expanding_mean
 
 class BeliefUpdate:
     def __init__(self, FLAGS, submodules, n_policies, batch_size, labels, name='BeliefUpdate'):

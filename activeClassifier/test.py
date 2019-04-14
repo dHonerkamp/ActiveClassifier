@@ -1,16 +1,13 @@
 from matplotlib import pyplot as plt
 import numpy as np
 import tensorflow as tf
-from tensorflow import distributions as tfd
 
 from env.env import ImageForagingEnvironment
 from tools.utility import Utility
 from tools.tf_tools import repeat_axis
 from tools.MSE_distribution import MSEDistribution
-# from activeClassifier import ActiveClassifier
 from modules.policyNetwork import PolicyNetwork
-from modules.VAE import GlimpseEncoder
-from env.get_data import create_class_mapping_ukMax
+from env import create_class_mapping_ukMax
 
 def setup():
     FLAGS, unparsed = Utility.parse_arg()

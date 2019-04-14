@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow import distributions as tfd
 
-from tools.tf_tools import TINY, output_into_gaussian_params, create_MLP, FiLM_layer
+from tools.tf_tools import FiLM_layer
 from tools.MSE_distribution import MSEDistribution
 
 class Encoder:

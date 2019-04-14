@@ -9,6 +9,7 @@ from models.predRSSM import predRSSM
 from visualisation.visualise_predRSSM import Visualization_predRSSM
 # from models.activeClassifier import ActiveClassifier
 # from visualisation.visualise_ActCl import Visualization_ActCl
+from phase_config import get_phases
 
 
 def evaluate(FLAGS, sess, model, feed, num_batches, writer, visual=None):
@@ -99,17 +100,8 @@ def main():
     # load datasets
     train_data, valid_data, test_data = get_data(FLAGS)
 
-    # define phases
-    phases = [
-              {'name'            : 'Pre',
-               'num_epochs'      : FLAGS.pre_train_epochs,
-               'policy'          : 'random',  # RL
-               'final_eval'      : False},
-              {'name'            : 'Full',
-               'num_epochs'      : FLAGS.num_epochs - FLAGS.pre_train_epochs,
-               'policy'          : FLAGS.planner,
-               'final_eval'      : True},
-              ]
+    # phases
+    phases = get_phases(FLAGS)
 
     writers = Utility.init_writers(FLAGS)
     cp_path = FLAGS.path + "/cp.ckpt"
@@ -120,6 +112,11 @@ def main():
             continue
         logging.info('Starting phase {}.'.format(phase['name']))
         tf.reset_default_graph()
+
+        if FLAGS.uk_label and (phase['incl_uk'] is False):
+            x, y = train_data
+            is_uk = (y == FLAGS.uk_label)
+            train_data = (x[~is_uk], y[~is_uk])
 
         with tf.Session(config=config) as sess:
             # Initialise env and model

@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
-from matplotlib.patches import Rectangle
 
 from visualisation.base import Base
 

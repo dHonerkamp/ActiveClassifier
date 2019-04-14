@@ -249,13 +249,16 @@ class predRSSM(base.Base):
                        }
             if FLAGS.uk_label:
                 corr = tf.equal(self.y_MC, classification_decision)
-                uk = tf.equal(self.y_MC, FLAGS.uk_label)
-                self.acc_uk = tf.reduce_mean(tf.cast(tf.boolean_mask(corr, mask=uk), tf.float32))
+                is_uk = tf.equal(self.y_MC, FLAGS.uk_label)
+                corr_kn, corr_uk = tf.dynamic_partition(corr, tf.cast(is_uk, tf.int32), num_partitions=2)
+                self.acc_kn = tf.reduce_mean(tf.cast(corr_kn, tf.float32))
+                self.acc_uk = tf.reduce_mean(tf.cast(corr_uk, tf.float32))
                 share_clf_uk = tf.reduce_mean(tf.cast(tf.equal(classification_decision, FLAGS.uk_label), tf.float32))
                 scalars['uk/acc_uk'] = self.acc_uk
+                scalars['uk/acc_kn'] = self.acc_kn
                 scalars['uk/share_clf_uk'] = share_clf_uk
             else:
-                self.acc_uk, share_clf_uk = tf.constant(0.), tf.constant(0.)
+                self.acc_kn, self.acc_uk, share_clf_uk = tf.constant(0.), tf.constant(0.), tf.constant(0.)
 
             for name, scalar in scalars.items():
                 tf.summary.scalar(name, scalar)

@@ -102,6 +102,7 @@ class ActInfPlanner(Planner):
 
                 # expected entropy
                 # TODO: HOW TO DEFINE ENTROPY??? (FIRST THING: PREDICTED Z ARE DEFINITELY NO PROBS, IF ANYTHING THEY'D BE LOGITS)
+                # TODO: COULD USE SIGMA AS MEASURE OF HOW UNCERTAIN THIS FEATURE IS
                 exp_obs = tf.reshape(exp_obs_prior['mu'], [self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size])  # [B, n_policies, hyp, glimpse]
                 # exp_obs_flat = tf.reshape(exp_obs, [self.B * self.n_policies * self.num_classes_kn, self.m['VAEEncoder'].output_size])
                 # H = entropy(probs=exp_obs_flat)  # [B * n_policies * hyp]

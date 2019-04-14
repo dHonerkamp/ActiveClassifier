@@ -1,6 +1,7 @@
 import logging
 import time
 import tensorflow as tf
+from sklearn.metrics import f1_score
 
 from env.env import ImageForagingEnvironment
 from tools.utility import Utility
@@ -27,9 +28,12 @@ def evaluate(FLAGS, sess, model, feed, num_batches, writer, visual=None):
     for i in range(num_batches):
         out = sess.run(fetch, feed_dict=feed)
         batch_values = Utility.update_batch_stats(batch_values, out, batch_sz=out['y_MC'].shape[0])  # batch_sz of last batch might be smaller
-
     sess.run(tf.local_variables_initializer())# set streaming_metrics back to zero
     summs = [tf.Summary.Value(tag="batch/" + var, simple_value=avg) for var, avg in zip(model.metrics_names, out["metrics"])]
+
+    f1 = f1_score(batch_values['y_MC'], batch_values['clf'], labels=None, average="macro")
+    summs.append(tf.Summary.Value(tag='batch/Main/f1_macro', simple_value=f1))
+
     batch_summaries = tf.Summary(value=summs)
     writer.add_summary(batch_summaries, out['step'])
     writer.add_summary(out['summary'], out['step'])
@@ -41,7 +45,7 @@ def evaluate(FLAGS, sess, model, feed, num_batches, writer, visual=None):
         visual.plot_stateBelieves(batch_values, suffix=sfx)
 
     prefix = writer.get_logdir().split('/')[-1].upper() + ':'
-    strs = [item for pair in zip(model.metrics_names, out["metrics"]) for item in pair]
+    strs = [item for pair in zip(model.metrics_names, out["metrics"]) for item in pair] + ['f1', f1]
     s = 'step {} - phase {} - {}'.format(out['step'], out['phase'], prefix) + len(strs) // 2 * ' {}: {:.3f}'
     logging.info(s.format(*strs))
 
@@ -69,10 +73,10 @@ def training_loop(FLAGS, sess, model, handles, writers, phase):
         for i in range(FLAGS.train_batches_per_epoch):
             if i and (i % 100 == 0):
                 step, train_summ = sess.run([model.global_step, model.summary], feed_dict=feeds['eval_train'])
-                step, valid_summ, loss, acc, T, acc_uk = sess.run([model.global_step, model.summary, model.loss, model.acc, model.avg_T, model.acc_uk], feed_dict=feeds['eval_valid'])
+                step, valid_summ, loss, acc, T, acc_uk, acc_kn = sess.run([model.global_step, model.summary, model.loss, model.acc, model.avg_T, model.acc_uk, model.acc_kn], feed_dict=feeds['eval_valid'])
                 writers['train'].add_summary(train_summ, global_step=step)
                 writers['valid'].add_summary(valid_summ, global_step=step)
-                print('{}/{}, loss: {:.3f}, acc: {:.3f}, T: {:.3f}, acc_uk: {:.3f}'.format(i, FLAGS.train_batches_per_epoch, loss, acc, T, acc_uk))
+                print('{}/{}, loss: {:.3f}, acc: {:.3f}, T: {:.3f}, acc_kn: {:.3f}, acc_uk: {:.3f}'.format(i, FLAGS.train_batches_per_epoch, loss, acc, T, acc_kn, acc_uk))
             else:
                 sess.run(train_op, feed_dict=feeds['train'])
 

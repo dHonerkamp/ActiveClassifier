@@ -142,7 +142,7 @@ class Utility(object):
                             help='List of scale dimensionalities used for retina network (size of the glimpses). Resolution gets reduced to first glimpses size.'
                                  'Smallest to largest scale. Following scales must be a multiple of the first. Might not work for uneven scale sizes!')
         # dataset
-        parser.add_argument('--dataset', type=str, default='MNIST', choices=['MNIST', 'MNIST_cluttered', 'MNIST_OMNI_notMNIST', 'cifar10', 'omniglot'], help='What dataset to use.')
+        parser.add_argument('-d', '--dataset', type=str, default='MNIST', choices=['MNIST', 'MNIST_cluttered', 'MNIST_OMNI_notMNIST', 'cifar10', 'omniglot'], help='What dataset to use.')
         parser.add_argument('--translated_size', type=int, default=0, help='Size of the canvas to translate images on.')
         parser.add_argument('--img_resize', type=int, default=0, help='Pixels to which to resize the images to.')
         parser.add_argument('--binarize_MNIST', type=int, choices=[0, 1], default=0, help='Binarize MNIST.')

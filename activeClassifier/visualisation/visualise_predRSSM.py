@@ -37,10 +37,10 @@ class Visualization_predRSSM(Base):
                       }
 
         if self.visualisation_level > 0:
-            folders = ['glimpses', 'reconstr']
+            folders = ['glimpses', 'fb']
 
             if self.visualisation_level > 1:
-                folders.append('fb')
+                folders.append('reconstr')
                 folders.append('c')
 
             #     if (self.planner != 'RL'):
@@ -61,10 +61,11 @@ class Visualization_predRSSM(Base):
 
             self.prefix = 's{}_e{}_ph{}'.format(d['step'], d['epoch'], d['phase'])
             self.plot_overview(d, nr_obs_overview, suffix)
-            self.plot_reconstr(d, nr_obs_reconstr, suffix)
 
             if self.visualisation_level > 1:
                 self.plot_stateBelieves(d, suffix)
+                self.plot_reconstr(d, nr_obs_reconstr, suffix)
+
             #     self.plot_fb(d, prefix)
             #     if (self.planner != 'RL') & (d['epoch'] >= self.pre_train_epochs):
             #         self.plot_planning(d, prefix, nr_examples=1)  # one plot for each policy

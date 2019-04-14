@@ -235,8 +235,8 @@ class predRSSM(base.Base):
             metrics_upd_coll = "streaming_updates"
 
             self.acc = tf.reduce_mean(tf.cast(tf.equal(self.y_MC, classification_decision), tf.float32))  # only to get easy direct intermendiate outputs
-            scalars = {'main/Loss': self.loss,
-                       'main/Acc': self.acc,
+            scalars = {'Main/loss': self.loss,
+                       'Main/acc': self.acc,
                        'loss/VAE_nll_post': nll_post,
                        'loss/VAE_KLdiv': KLdiv,
                        'loss/RL_locBl_mse': tf.reduce_mean(baseline_mse),
@@ -252,7 +252,7 @@ class predRSSM(base.Base):
                 uk = tf.equal(self.y_MC, FLAGS.uk_label)
                 self.acc_uk = tf.reduce_mean(tf.cast(tf.boolean_mask(corr, mask=uk), tf.float32))
                 share_clf_uk = tf.reduce_mean(tf.cast(tf.equal(classification_decision, FLAGS.uk_label), tf.float32))
-                scalars['uk/accuracy_uk'] = self.acc_uk
+                scalars['uk/acc_uk'] = self.acc_uk
                 scalars['uk/share_clf_uk'] = share_clf_uk
             else:
                 self.acc_uk, share_clf_uk = tf.constant(0.), tf.constant(0.)

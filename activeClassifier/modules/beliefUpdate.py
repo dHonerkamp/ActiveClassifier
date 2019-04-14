@@ -102,6 +102,7 @@ class PredErrorUpdate(BeliefUpdate):
         return current_state, self.loss(uk_belief_logits)
 
     def loss(self, logits):
+        # TODO: DON'T TRAIN IF IN PRETRAINING WITHOUT ANY UKS
         if logits is not None:
             # TODO: ALTERNATIVELY USE A POLICY GRADIENT LOSS INCL. BASELINE
             is_uk = tf.equal(self.labels, self.uk_label)

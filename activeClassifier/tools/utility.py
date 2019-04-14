@@ -59,7 +59,7 @@ class Utility(object):
     def set_exp_name(FLAGS):
         experiment_name = '{}gl_{}_{}_bs{}_MC{}_preTr{}{}uk{}_dcay{}_lr{}_{}sc{}_lstd{}_glstd{}_z{}_fbN{}'.format(
                 FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples,
-                FLAGS.pre_train_policy, FLAGS.pre_train_epochs, FLAGS.pre_train_uk,
+                FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk,
                 FLAGS.learning_rate_decay_factor, FLAGS.learning_rate,
                 len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.loc_std, FLAGS.gl_std, FLAGS.size_z, FLAGS.normalise_fb)
         if FLAGS.use_conv:

@@ -73,7 +73,7 @@ class Visualization_predRSSM(Base):
     def plot_reconstr(self, d, nr_examples, suffix='', folder_name='reconstr'):
         if self.visualisation_level < 1:
             return
-        
+
         def get_title_color(post_believes, hyp):
             if post_believes[hyp] == post_believes.max():
                 color = 'magenta'
@@ -83,20 +83,13 @@ class Visualization_predRSSM(Base):
                 color = 'black'
             return color
 
-        nr_examples = min(nr_examples, self.batch_size_eff)
         nax = 2 + self.num_classes_kn
 
         gl = self._scale_reshp(d['glimpse'])  # [T, B, scale[0], scales*scale[0]]
         gl_post = self._scale_reshp(d['reconstr_posterior'])  # [T, B, scale[0], scales*scale[0]]
         gl_preds = self._scale_reshp(d['reconstr_prior'])  # [T, B, hyp, scale[0], scales*scale[0]]
 
-        idx_examples =list(range(nr_examples))
-
-        if self.uk_label is not None:  # ensure at least 2 uk examples
-            is_uk = (d['y'] == self.uk_label)
-            idx_uk = np.arange(self.batch_size_eff)[is_uk]
-            idx_examples += list(idx_uk[:2])
-            idx_examples = np.unique(idx_examples)
+        idx_examples = self._get_idx_examples(d['y'], nr_examples, replace=False)
 
         for i in idx_examples:
             f, axes = plt.subplots(self.num_glimpses + 1, nax, figsize=(4 * self.num_scales * nax, 4 * (self.num_glimpses + 1)))
@@ -126,7 +119,7 @@ class Visualization_predRSSM(Base):
 
             [ax.set_axis_off() for ax in axes.ravel()]
             self._save_fig(f, folder_name, '{}{}_n{}{isuk}.png'.format(self.prefix, suffix, i,
-                                                                       isuk='_uk' if (self.uk_label is not None) and (i in idx_uk) else ''))
+                                                                       isuk='_uk' if (d['y'][i] == self.uk_label) else ''))
 
     def plot_fb(self, d, suffix=''):
         def fb_hist(fb1, fb2, ax, title, add_legend):

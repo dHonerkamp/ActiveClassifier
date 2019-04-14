@@ -40,6 +40,22 @@ class Base:
         locs = (locs / 2 + 0.5) * self.img_shape[1::-1] - 1  # in img_shape y comes first, then x
         return locs
 
+    def _get_idx_examples(self, y, nr_examples, nr_uk=2, replace=True):
+        """Return the indexes of examples to plot, including nr_uk uks."""
+        nr_examples = min(nr_examples, self.batch_size_eff)
+
+        if self.uk_label is None:
+            idx_examples =list(range(nr_examples))
+        else:  # ensure at least nr_uk uk examples
+            is_uk = (y == self.uk_label)
+            idx_uk = np.arange(self.batch_size_eff)[is_uk]
+            idx_kn = np.arange(self.batch_size_eff)[~is_uk]
+
+            nr_kn = nr_examples - nr_uk if replace or (nr_examples > self.batch_size_eff) else nr_examples
+            idx_examples = list(idx_kn[:nr_kn])
+            idx_examples += list(idx_uk[:nr_uk])
+        return idx_examples
+
     def _eval_feed(self, sess, feed):
         d = sess.run(self.fetch, feed_dict=feed)
 
@@ -58,10 +74,11 @@ class Base:
         axes    = axes.reshape([nr_examples, self.num_glimpses + 1])
 
         nr_examples = min(self.batch_size_eff, nr_examples)  # might have less examples if at the end of a batch
-        for i in range(nr_examples):
-            self._plot_img_plus_locs(axes[i, 0], d['x'][i], d['y'][i], d['clf'][i], d['locs'][:, i, :], d['decisions'][:, i])
+        idx_examples = self._get_idx_examples(d['y'], nr_examples, replace=True)
+        for a, i in enumerate(idx_examples):
+            self._plot_img_plus_locs(axes[a, 0], d['x'][i], d['y'][i], d['clf'][i], d['locs'][:, i, :], d['decisions'][:, i])
             for t in range(self.num_glimpses):
-                self._plot_composed_glimpse(axes[i, t + 1], d['gl_composed'][t, i], d['state_believes'][t, i], d['decisions'][t, i])
+                self._plot_composed_glimpse(axes[a, t + 1], d['gl_composed'][t, i], d['state_believes'][t, i], d['decisions'][t, i])
 
         plt.setp(axes, xticks=[], yticks=[])
         self._save_fig(f, 'glimpses', '{}{}.png'.format(self.prefix, suffix))

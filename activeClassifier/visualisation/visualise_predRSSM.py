@@ -37,10 +37,10 @@ class Visualization_predRSSM(Base):
                       }
 
         if self.visualisation_level > 0:
-            folders = ['glimpses', 'reconstr']
+            folders = ['glimpses', 'fb']
 
             if self.visualisation_level > 1:
-                folders.append('fb')
+                folders.append('reconstr')
                 folders.append('c')
 
             #     if (self.planner != 'RL'):
@@ -61,10 +61,11 @@ class Visualization_predRSSM(Base):
 
             self.prefix = 's{}_e{}_ph{}'.format(d['step'], d['epoch'], d['phase'])
             self.plot_overview(d, nr_obs_overview, suffix)
-            self.plot_reconstr(d, nr_obs_reconstr, suffix)
 
             if self.visualisation_level > 1:
                 self.plot_stateBelieves(d, suffix)
+                self.plot_reconstr(d, nr_obs_reconstr, suffix)
+
             #     self.plot_fb(d, prefix)
             #     if (self.planner != 'RL') & (d['epoch'] >= self.pre_train_epochs):
             #         self.plot_planning(d, prefix, nr_examples=1)  # one plot for each policy
@@ -178,20 +179,21 @@ class Visualization_predRSSM(Base):
 
     def plot_stateBelieves(self, d, suffix):
         # TODO: INCLUDE uk_belief and plots differentiating by known/uk
-        ntax = self.num_glimpses
-        bins = 40
-        f, axes = plt.subplots(ntax, 1, figsize=(4, 4 * self.num_glimpses), squeeze=False)
-        top_believes = d['state_believes'].max(axis=2)  # [T+1, B, num_classes] -> [T+1, B]
+        if self.visualisation_level > 1:
+            ntax = self.num_glimpses
+            bins = 40
+            f, axes = plt.subplots(ntax, 1, figsize=(4, 4 * self.num_glimpses), squeeze=False)
+            top_believes = d['state_believes'].max(axis=2)  # [T+1, B, num_classes] -> [T+1, B]
 
-        is_corr = (d['y'] == d['clf'])
-        corr = top_believes[:, is_corr]
-        wrong = top_believes[:, ~is_corr]
+            is_corr = (d['y'] == d['clf'])
+            corr = top_believes[:, is_corr]
+            wrong = top_believes[:, ~is_corr]
 
-        for t in range(ntax):
-            axes[t, 0].hist(corr[t+1], bins=bins, alpha=0.5, label='corr')
-            axes[t, 0].hist(wrong[t+1], bins=bins, alpha=0.5, label='wrong')
-            axes[t, 0].legend(loc='upper right')
-            axes[t, 0].set_title('Top believes after glimpse {}'.format(t))
-            axes[t, 0].set_xlim([0, 1])
+            for t in range(ntax):
+                axes[t, 0].hist(corr[t+1], bins=bins, alpha=0.5, label='corr')
+                axes[t, 0].hist(wrong[t+1], bins=bins, alpha=0.5, label='wrong')
+                axes[t, 0].legend(loc='upper right')
+                axes[t, 0].set_title('Top believes after glimpse {}'.format(t))
+                axes[t, 0].set_xlim([0, 1])
 
-        self._save_fig(f, 'c', '{}{}.png'.format(self.prefix, suffix))
+            self._save_fig(f, 'c', '{}{}.png'.format(self.prefix, suffix))

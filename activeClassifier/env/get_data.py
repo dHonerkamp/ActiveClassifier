@@ -185,7 +185,7 @@ def get_data(FLAGS):
 
         # uk will be an additional class with the highest label
         FLAGS.num_classes += 1
-        _, FLAGS.class_remapping, FLAGS.uk_label, FLAGS.num_classes, FLAGS.num_classes_kn = create_class_mapping_ukMax(FLAGS.num_classes, uks=[FLAGS.num_classes])
+        _, FLAGS.class_remapping, FLAGS.uk_label, FLAGS.num_classes, FLAGS.num_classes_kn = create_class_mapping_ukMax(FLAGS.num_classes, uks=[FLAGS.num_classes - 1])
 
         # add resized OMNIGLOT as unknowns to train and validation set
         def get_uk_y(length):

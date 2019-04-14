@@ -71,6 +71,9 @@ class Visualization_predRSSM(Base):
             #         self.plot_planning(d, prefix, nr_examples=1)  # one plot for each policy
 
     def plot_reconstr(self, d, nr_examples, suffix='', folder_name='reconstr'):
+        if self.visualisation_level < 1:
+            return
+        
         def get_title_color(post_believes, hyp):
             if post_believes[hyp] == post_believes.max():
                 color = 'magenta'
@@ -134,66 +137,67 @@ class Visualization_predRSSM(Base):
             if add_legend:
                 ax.legend(loc='upper right')
 
-        if self.visualisation_level > 1:
-            nax = self.num_classes
-            ntax = self.num_glimpses
-            bins = 40
+        nax = self.num_classes
+        ntax = self.num_glimpses
+        bins = 40
 
-            f, axes = plt.subplots(ntax, nax, figsize=(4 * nax, 4 * self.num_glimpses))
+        f, axes = plt.subplots(ntax, nax, figsize=(4 * nax, 4 * self.num_glimpses))
+
+        if self.uk_label is not None:
+            is_uk = (d['y'] == self.uk_label)
+            fb_kn_best = d['fb'][:, ~is_uk, :].min(axis=2)  # in-shape: [T, B, hyp]
+            fb_uk_best = d['fb'][:, is_uk, :].min(axis=2)
+        else:
+            fb_kn_best, fb_uk_best = None, None
+
+        for t in range(ntax):
+            for hyp in range(self.num_classes_kn):
+                is_hyp = (d['y'] == hyp)
+                if t < (ntax - 1):
+                    pre = 't{}: '.format(t) if (hyp == 0) else ''
+                    fb_corr  = d['fb'][t, is_hyp, hyp]
+                    fb_wrong = d['fb'][t, ~is_hyp, hyp]
+                else:  # last row: sum over time
+                    pre = 'All t: ' if (hyp == 0) else ''
+                    fb_corr  = d['fb'][:, is_hyp, hyp].sum(axis=0)
+                    fb_wrong = d['fb'][:, ~is_hyp, hyp].sum(axis=0)
+                fb_hist((fb_corr, 'correct hyp'),
+                        (fb_wrong, 'wrong hyp'),
+                        axes[t, hyp], '{}hyp: {}'.format(pre, self.lbl_map[hyp]), add_legend=(t==0))
 
             if self.uk_label is not None:
-                is_uk = (d['y'] == self.uk_label)
-                fb_kn_best = d['fb'][:, ~is_uk, :].min(axis=2)  # in-shape: [T, B, hyp]
-                fb_uk_best = d['fb'][:, is_uk, :].min(axis=2)
-            else:
-                fb_kn_best, fb_uk_best = None, None
+                # right most: best fb across hyp for kn vs uk
+                if t < (ntax - 1):
+                    fb_kn = fb_kn_best[t]
+                    fb_uk = fb_uk_best[t]
+                else:
+                    fb_kn = fb_kn_best.sum(axis=0)
+                    fb_uk = fb_uk_best.sum(axis=0)
+                fb_hist((fb_kn, 'known'),
+                        (fb_uk, 'uk'),
+                        axes[t, nax - 1], 'best fb', add_legend=(t==0))
 
-            for t in range(ntax):
-                for hyp in range(self.num_classes_kn):
-                    is_hyp = (d['y'] == hyp)
-                    if t < (ntax - 1):
-                        pre = 't{}: '.format(t) if (hyp == 0) else ''
-                        fb_corr  = d['fb'][t, is_hyp, hyp]
-                        fb_wrong = d['fb'][t, ~is_hyp, hyp]
-                    else:  # last row: sum over time
-                        pre = 'All t: ' if (hyp == 0) else ''
-                        fb_corr  = d['fb'][:, is_hyp, hyp].sum(axis=0)
-                        fb_wrong = d['fb'][:, ~is_hyp, hyp].sum(axis=0)
-                    fb_hist((fb_corr, 'correct hyp'),
-                            (fb_wrong, 'wrong hyp'),
-                            axes[t, hyp], '{}hyp: {}'.format(pre, self.lbl_map[hyp]), add_legend=(t==0))
-
-                if self.uk_label is not None:
-                    # right most: best fb across hyp for kn vs uk
-                    if t < (ntax - 1):
-                        fb_kn = fb_kn_best[t]
-                        fb_uk = fb_uk_best[t]
-                    else:
-                        fb_kn = fb_kn_best.sum(axis=0)
-                        fb_uk = fb_uk_best.sum(axis=0)
-                    fb_hist((fb_kn, 'known'),
-                            (fb_uk, 'uk'),
-                            axes[t, nax - 1], 'best fb', add_legend=(t==0))
-
-            self._save_fig(f, 'fb', '{}{}.png'.format(self.prefix, suffix))
+        self._save_fig(f, 'fb', '{}{}.png'.format(self.prefix, suffix))
 
     def plot_stateBelieves(self, d, suffix):
         # TODO: INCLUDE uk_belief and plots differentiating by known/uk
-        if self.visualisation_level > 1:
-            ntax = self.num_glimpses
-            bins = 40
-            f, axes = plt.subplots(ntax, 1, figsize=(4, 4 * self.num_glimpses), squeeze=False)
-            top_believes = d['state_believes'].max(axis=2)  # [T+1, B, num_classes] -> [T+1, B]
+        if self.visualisation_level < 2:
+            return
 
-            is_corr = (d['y'] == d['clf'])
-            corr = top_believes[:, is_corr]
-            wrong = top_believes[:, ~is_corr]
+        ntax = self.num_glimpses
+        bins = 40
+        f, axes = plt.subplots(ntax, 1, figsize=(4, 4 * self.num_glimpses), squeeze=False)
+        top_believes = d['state_believes'].max(axis=2)  # [T+1, B, num_classes] -> [T+1, B]
 
-            for t in range(ntax):
-                axes[t, 0].hist(corr[t+1], bins=bins, alpha=0.5, label='corr')
-                axes[t, 0].hist(wrong[t+1], bins=bins, alpha=0.5, label='wrong')
-                axes[t, 0].legend(loc='upper right')
-                axes[t, 0].set_title('Top believes after glimpse {}'.format(t))
-                axes[t, 0].set_xlim([0, 1])
+        is_corr = (d['y'] == d['clf'])
+        corr = top_believes[:, is_corr]
+        wrong = top_believes[:, ~is_corr]
 
-            self._save_fig(f, 'c', '{}{}.png'.format(self.prefix, suffix))
+        for t in range(ntax):
+            axes[t, 0].hist(corr[t+1], bins=bins, alpha=0.5, label='corr')
+            axes[t, 0].hist(wrong[t+1], bins=bins, alpha=0.5, label='wrong')
+            axes[t, 0].legend(loc='upper right')
+            axes[t, 0].set_title('Top believes after glimpse {}'.format(t))
+            axes[t, 0].set_xlim([0, 1])
+
+        self._save_fig(f, 'c', '{}{}.png'.format(self.prefix, suffix))

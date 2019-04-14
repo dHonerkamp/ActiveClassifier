@@ -57,7 +57,7 @@ class Utility(object):
 
     @staticmethod
     def set_exp_name(FLAGS):
-        experiment_name = '{}gl_{}_{}_bs{}_MC{}_preTr{}{}{}_dcay{}_lr{}_{}sc{}_lstd{}_glstd{}_z{}_fbN{}'.format(
+        experiment_name = '{}gl_{}_{}_bs{}_MC{}_preTr{}{}uk{}_dcay{}_lr{}_{}sc{}_lstd{}_glstd{}_z{}_fbN{}'.format(
                 FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples,
                 FLAGS.pre_train_policy, FLAGS.pre_train_epochs, FLAGS.pre_train_uk,
                 FLAGS.learning_rate_decay_factor, FLAGS.learning_rate,

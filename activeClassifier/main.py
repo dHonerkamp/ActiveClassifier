@@ -57,7 +57,7 @@ def training_loop(FLAGS, sess, model, handles, writers, phase):
         evaluate(FLAGS, sess, model, feeds['eval_train'], FLAGS.batches_per_eval_valid, writers['train'])
         evaluate(FLAGS, sess, model, feeds['eval_valid'], FLAGS.batches_per_eval_valid, writers['valid'], Visual)
         if FLAGS.uk_label:  # just to faster sense if it generalises to UU or not
-            evaluate(FLAGS, sess, model, feeds['eval_valid'], FLAGS.batches_per_eval_test, writers['test'], Visual)
+            evaluate(FLAGS, sess, model, feeds['eval_test'], FLAGS.batches_per_eval_test, writers['test'], Visual)
 
     feeds = model.get_feeds(FLAGS, handles)
     Visual = Visualization_predRSSM(model, FLAGS)

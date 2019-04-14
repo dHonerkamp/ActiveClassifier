@@ -177,6 +177,7 @@ def get_data(FLAGS):
         valid = (x_train[-10000:], y_train[-10000:])
     elif FLAGS.dataset == "omniglot":
         train, valid, test = get_OMNIGLOT(FLAGS, data_path)
+        raise ValueError('New uk masking not yet implemented.')
     elif FLAGS.dataset == 'MNIST_OMNI_notMNIST':
         train, valid, test = get_MNIST(FLAGS)
         len_tr = int(FLAGS.uk_pct * train[0].shape[0])

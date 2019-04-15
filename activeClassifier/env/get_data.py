@@ -224,8 +224,8 @@ def get_data(FLAGS):
 
     # ensure flags are set correctly
     assert FLAGS.num_classes - FLAGS.num_classes_kn in [0, 1]
-    assert FLAGS.num_classes == len(set(train[1]))
-    if FLAGS.uk_label:
+    assert (FLAGS.num_classes == len(set(train[1]))) or (FLAGS.uk_cycling and (FLAGS.num_classes == len(set(train[1])) + 1))
+    if FLAGS.uk_label and not FLAGS.uk_cycling:
         assert FLAGS.num_classes_kn == len(set(train[1])) - 1
     else:
         assert FLAGS.num_classes_kn == len(set(train[1]))

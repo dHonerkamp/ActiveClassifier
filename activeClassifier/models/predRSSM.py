@@ -16,6 +16,21 @@ class predRSSM(base.Base):
         min_glimpses = 3
         policy = phase['policy']
 
+        if FLAGS.uk_cycling:  # randomly select a number of known class and mask them as FLAGS.uk_label
+            # TODO: multinomial can draw the same class multiple times in the same draw
+            p = 1. / FLAGS.num_classes_kn
+            current_cycl_uk = tf.cond(self.is_training,
+                                     lambda: tf.multinomial(tf.log(tf.fill([1, FLAGS.num_classes_kn], p)), num_samples=FLAGS.uk_cycling, output_dtype=tf.int32),  # [1, uks]
+                                     lambda: tf.cast(tf.fill([1, FLAGS.num_classes_kn], -1), dtype=tf.int32),
+                                     name='cycling_cond')
+
+            y_exp = self.y_MC[:, tf.newaxis]
+            is_cycling_uk = tf.reduce_any(tf.equal(y_exp, current_cycl_uk), axis=1)  # broadcasting to [B, uks], reducing to [B]
+            self.y_MC = tf.where(is_cycling_uk, tf.fill([self.B], FLAGS.uk_label), self.y_MC)
+            current_cycl_uk = tf.squeeze(current_cycl_uk, 0)  # [uks]
+        else:
+            current_cycl_uk = None
+
         # Initialise modules
         n_policies = FLAGS.num_classes_kn if FLAGS.planner == 'ActInf' else 1
         policyNet = PolicyNetwork(FLAGS, self.B, n_policies)
@@ -38,11 +53,11 @@ class predRSSM(base.Base):
 
         self.n_policies = planner.n_policies
         if FLAGS.beliefUpdate == 'fb':
-            beliefUpdate = PredErrorUpdate(FLAGS, submodules, self.n_policies, self.B, labels=self.y_MC)
+            beliefUpdate = PredErrorUpdate(FLAGS, submodules, self.n_policies, self.B, labels=self.y_MC, current_cycl_uk=current_cycl_uk)
         elif FLAGS.beliefUpdate == 'fc':
-            beliefUpdate = FullyConnectedUpdate(FLAGS, submodules, self.n_policies, self.B, labels=self.y_MC)
+            beliefUpdate = FullyConnectedUpdate(FLAGS, submodules, self.n_policies, self.B, labels=self.y_MC, current_cycl_uk=current_cycl_uk)
         elif FLAGS.beliefUpdate == 'RAM':
-            beliefUpdate = RAMUpdate(FLAGS, submodules, self.n_policies, self.B, labels=self.y_MC)
+            beliefUpdate = RAMUpdate(FLAGS, submodules, self.n_policies, self.B, labels=self.y_MC, current_cycl_uk=current_cycl_uk)
         else:
             raise ValueError('Undefined beliefUpdate.')
 
@@ -250,12 +265,15 @@ class predRSSM(base.Base):
             if FLAGS.uk_label:
                 corr = tf.equal(self.y_MC, classification_decision)
                 is_uk = tf.equal(self.y_MC, FLAGS.uk_label)
-                corr_kn, corr_uk = tf.dynamic_partition(corr, tf.cast(is_uk, tf.int32), num_partitions=2)
+                corr_kn, corr_uk = tf.dynamic_partition(corr, partitions=tf.cast(is_uk, tf.int32), num_partitions=2)
+                # corr_uk = tf.Print(corr_uk, ['a', tf.reduce_sum(tf.cast(is_uk, tf.float32)), is_uk], summarize=30)
+                # corr_uk = tf.Print(corr_uk, ['b', tf.reduce_sum(tf.cast(is_uk, tf.float32)), corr_kn], summarize=30)
+                # corr_uk = tf.Print(corr_uk, ['c', tf.reduce_sum(tf.cast(is_uk, tf.float32)), corr_uk], summarize=30)
                 self.acc_kn = tf.reduce_mean(tf.cast(corr_kn, tf.float32))
-                self.acc_uk = tf.reduce_mean(tf.cast(corr_uk, tf.float32))
+                self.acc_uk = tf.reduce_mean(tf.cast(corr_uk, tf.float32))  # can be nan if there are no uks
                 share_clf_uk = tf.reduce_mean(tf.cast(tf.equal(classification_decision, FLAGS.uk_label), tf.float32))
-                scalars['uk/acc_uk'] = self.acc_uk
                 scalars['uk/acc_kn'] = self.acc_kn
+                scalars['uk/acc_uk'] = self.acc_uk
                 scalars['uk/share_clf_uk'] = share_clf_uk
             else:
                 self.acc_kn, self.acc_uk, share_clf_uk = tf.constant(0.), tf.constant(0.), tf.constant(0.)

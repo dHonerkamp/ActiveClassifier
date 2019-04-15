@@ -7,7 +7,7 @@ from tools.utility import Utility
 from tools.tf_tools import repeat_axis
 from tools.MSE_distribution import MSEDistribution
 from modules.policyNetwork import PolicyNetwork
-from env import create_class_mapping_ukMax
+from env.get_data import get_data, create_class_mapping_ukMax
 
 def setup():
     FLAGS, unparsed = Utility.parse_arg()
@@ -56,8 +56,6 @@ def hyp_tiling():
 
     with tf.Session() as sess:
         out = sess.run(hyp)
-        print(out)
-
         assert (out == [[1., 0., 0., 0., 0.],
                         [0., 1., 0., 0., 0.],
                         [0., 0., 1., 0., 0.],
@@ -251,13 +249,6 @@ def uk_mapping():
     uks = [3, 6, 8]
     labels = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3])
 
-    mapping0, uk_class = create_class_mapping_uk0(num_clases, uks)
-    print(mapping0, uk_class)
-
-    out = np.vectorize(mapping0.get)(labels)
-    print(out)
-
-
     mappingMax, uk_class = create_class_mapping_ukMax(num_clases, uks)
     print(mappingMax, uk_class)
 
@@ -271,13 +262,26 @@ def one_hot_incl_uk():
     oneHot = tf.one_hot(labels, depth=4)
     with tf.Session() as sess:
         out = oneHot.eval()
-
         assert (out == [[1., 0., 0., 0.],
                         [0., 1., 0., 0.],
                         [0., 0., 1., 0.],
                         [0., 0., 0., 1.],
                         [0., 0., 0., 0.],
                         [1., 0., 0., 0.]]).all()
+
+
+def khot_encoding():
+    B, num_classes = 3, 5
+    uk_list = tf.constant([1, 3])
+    khot_vector = tf.reduce_any(tf.cast(tf.one_hot(uk_list, depth=num_classes), tf.bool), axis=0, keep_dims=True)
+    khot_batch = tf.tile(khot_vector, [B, 1])
+
+    with tf.Session() as sess:
+        out = khot_batch.eval()
+        assert (out == [[False, True, False, True, False],
+                        [False, True, False, True, False],
+                        [False, True, False, True, False]]).all()
+
 
 if __name__ == '__main__':
     # FLAGS, train_data, valid_data, test_data, env = setup()
@@ -287,10 +291,10 @@ if __name__ == '__main__':
     #
     # env_step(env)
 
-    # hyp_tiling()
-    # hyp_tiling2()
-    # z_tiling()
-    # z_indexing()
+    hyp_tiling()
+    hyp_tiling2()
+    z_tiling()
+    z_indexing()
 
     # MSE_dist()
 
@@ -298,3 +302,4 @@ if __name__ == '__main__':
     # uk_mapping()
 
     one_hot_incl_uk()
+    khot_encoding()

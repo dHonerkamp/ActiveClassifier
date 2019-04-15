@@ -54,6 +54,12 @@ class Utility(object):
             FLAGS.cache = 0
         assert (FLAGS.uk_test_labels is None) or (type(FLAGS.uk_test_labels) == list)
         assert (FLAGS.uk_train_labels is None) or (type(FLAGS.uk_train_labels) == list)
+        assert  (FLAGS.num_uk_test == 0 ) or (FLAGS.uk_test_labels is None), 'Cannot define both num_uk_test and uk_test_labels'
+        assert  (FLAGS.num_uk_train == 0 ) or (FLAGS.uk_train_labels is None), 'Cannot define both num_uk_train and uk_train_labels'
+        if FLAGS.num_uk_test:
+            assert FLAGS.uk_folds
+        if FLAGS.uk_cycling:
+            assert (FLAGS.uk_folds and (FLAGS.num_uk_test is not None)) or (FLAGS.uk_test_labels is not None), 'Need to include uks in the test set.'
 
     @staticmethod
     def set_exp_name(FLAGS):
@@ -162,7 +168,8 @@ class Utility(object):
         parser.add_argument('--uk_train_labels', nargs='+', type=int, default=None, help='List of labels to set to unknown, but keep in training set. None to ignore.')
         # use uks from different datasets (MNIST_OMNI_notMNIST dataset)
         parser.add_argument('--uk_pct', type=float, default=0.3, help='Share of the dataset to be added as uks (resulting total observations = 100*(1 + uk_pct)%')
-        # parser.add_argument('--uk_cycle_schedule', type=int, default=0, choices=[0, 1], help='Whether to use the "open sed schedule" from the thesis. Set uk_train_labels to 0!')
+        # uk cycling
+        parser.add_argument('--uk_cycling', type=int, default=0, help='Whether to mask random known classes as uk each batch (whose predictions will be masked). Value determines how many uk classes to draw each batch.')
         # parser.add_argument('--num_uks_per_cycle', type=int, default=2, help='Number of classes to mask each epoch, if cycling.')
         # parser.add_argument('--punish_uk_wrong', type=float, default=0, help='If not 0: Reward of its value for not classifying an unknown as unknown.')
 

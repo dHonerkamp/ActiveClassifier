@@ -74,7 +74,7 @@ class Base:
         axes    = axes.reshape([nr_examples, self.num_glimpses + 1])
 
         nr_examples = min(self.batch_size_eff, nr_examples)  # might have less examples if at the end of a batch
-        idx_examples = self._get_idx_examples(d['y'], nr_examples, replace=True)
+        idx_examples = self._get_idx_examples(d['y'], nr_examples, nr_uk=4, replace=True)
         for a, i in enumerate(idx_examples):
             self._plot_img_plus_locs(axes[a, 0], d['x'][i], d['y'][i], d['clf'][i], d['locs'][:, i, :], d['decisions'][:, i])
             for t in range(self.num_glimpses):

@@ -3,7 +3,7 @@ from tensorflow import distributions as tfd
 
 
 class BeliefUpdate:
-    def __init__(self, FLAGS, submodules, n_policies, batch_size, labels, name='BeliefUpdate'):
+    def __init__(self, FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name='BeliefUpdate'):
         self.m = submodules
         self.name = name
         self.n_policies = n_policies
@@ -12,6 +12,11 @@ class BeliefUpdate:
         self.labels = labels
         self.normalise_fb = FLAGS.normalise_fb
         self.num_classes_kn = FLAGS.num_classes_kn
+
+        self.uk_cycling = FLAGS.uk_cycling
+        if self.uk_cycling:
+            khot_vector = tf.reduce_any(tf.cast(tf.one_hot(current_cycl_uk, depth=self.num_classes_kn), tf.bool), axis=0, keep_dims=True)
+            self.current_cycl_uk_mask = tf.tile(khot_vector, [self.B, 1])  # [B, num_classes_kn]
 
     def update(self, current_state, new_observation, exp_zs_prior, time, newly_done):
         """Given a new observation, and the last believes over the state, update the believes over the states.
@@ -42,6 +47,10 @@ class BeliefUpdate:
                 dist_prior = tfd.Normal(loc=exp_zs_prior['mu'], scale=exp_zs_prior['sigma'])
                 KLdiv = dist_post.kl_divergence(dist_prior)  # [B, hyp, z]
                 KLdiv = tf.reduce_sum(KLdiv, axis=2)
+
+                if self.uk_cycling:
+                    # mask the prediction error of the current uk classes with the highest prediction error of the observation
+                    KLdiv = tf.where(self.current_cycl_uk_mask, tf.tile(tf.reduce_max(KLdiv, axis=1, keep_dims=True), [1, self.num_classes_kn]), KLdiv)
 
             # aggregate feedback
             if self.normalise_fb:
@@ -79,8 +88,8 @@ class BeliefUpdate:
 
 
 class PredErrorUpdate(BeliefUpdate):
-    def __init__(self, FLAGS, submodules, n_policies, batch_size, labels, name='BeliefUpdate'):
-        super().__init__(FLAGS, submodules, n_policies, batch_size, labels, name)
+    def __init__(self, FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name='BeliefUpdate'):
+        super().__init__(FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name)
 
     def update_fn(self, current_state, predError, time, newly_done):
         # c = expanding_mean(tf.nn.softmax(-predError, axis=1), current_state['c'], time)
@@ -114,8 +123,8 @@ class PredErrorUpdate(BeliefUpdate):
 
 
 class FullyConnectedUpdate(BeliefUpdate):
-    def __init__(self, FLAGS, submodules, n_policies, batch_size, labels, name='BeliefUpdate'):
-        super().__init__(FLAGS, submodules, n_policies, batch_size, labels, name)
+    def __init__(self, FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name='BeliefUpdate'):
+        super().__init__(FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name)
 
     def update_fn(self, current_state, predError, time, newly_done):
         # TODO: AGGREGATE THE RAW VALUES OR SOFTMAX AT EACH STEP?
@@ -134,8 +143,8 @@ class FullyConnectedUpdate(BeliefUpdate):
 
 
 class RAMUpdate(BeliefUpdate):
-    def __init__(self, FLAGS, submodules, n_policies, batch_size, labels, name='BeliefUpdate'):
-        super().__init__(FLAGS, submodules, n_policies, batch_size, labels, name)
+    def __init__(self, FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name='BeliefUpdate'):
+        super().__init__(FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name)
 
     def update_fn(self, current_state, predError, time, newly_done):
         """Propagating xent gradients into current_state['s']"""

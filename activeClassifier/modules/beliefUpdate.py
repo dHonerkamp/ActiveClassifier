@@ -137,7 +137,7 @@ class FullyConnectedUpdate(BeliefUpdate):
         with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
             inputs = tf.stop_gradient(tf.concat([avg_fb, current_state['s']], axis=1))
             hidden = tf.layers.dense(inputs, units=self.num_classes_kn)
-            c_logits = FiLM_layer(tf.concat([avg_fb, tf.fill([self.B, 1], time)], axis=1), hidden)
+            c_logits = FiLM_layer(tf.concat([avg_fb, tf.fill([self.B, 1], tf.cast(time, tf.float32))], axis=1), hidden)
             c = tf.nn.softmax(c_logits)
 
         current_state['c'] = tf.stop_gradient(c)

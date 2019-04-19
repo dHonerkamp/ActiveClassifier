@@ -136,7 +136,7 @@ class Utility(object):
         # more important settings
         parser.add_argument('--planner', type=str, default='ActInf', choices=['ActInf', 'RL'], help='Planning strategy.')
         parser.add_argument('--beliefUpdate', type=str, default='fb', choices=['fb', 'fc', 'RAM'], help='Belief update strategy.')
-        parser.add_argument('--normalise_fb', type=int, default=0, choices=[0, 1], help='Use min_normalisation for prediction fb or not.')
+        parser.add_argument('--normalise_fb', type=int, default=0, choices=[0, 1, 2], help='Use min_normalisation for prediction fb or not. 1: divide by baseline, 1: subtract baseline')
         parser.add_argument('--prior_preference_c', type=int, default=2, help='Strength of preferences for correct / wrong classification.')
         parser.add_argument('--size_z', type=int, default=32, help='Dimensionality of the hidden states z.')
         parser.add_argument('--num_hidden_fc', type=int, default=512, help='Standard size of fully connected layers.')
@@ -169,6 +169,7 @@ class Utility(object):
         # use uks from different datasets (MNIST_OMNI_notMNIST dataset)
         parser.add_argument('--uk_pct', type=float, default=0.3, help='Share of the dataset to be added as uks (resulting total observations = 100*(1 + uk_pct)%')
         # uk cycling
+        # TODo: ATM DON'T HAVE ANY UK IN THE VALIDATION SET. BUT HAVE TO KEEP THE IS_TRAINING CONDITION, O/W WILL DO IT DURING TEST AS WELL
         parser.add_argument('--uk_cycling', type=int, default=0, help='Whether to mask random known classes as uk each batch (whose predictions will be masked). Value determines how many uk classes to draw each batch.')
         # parser.add_argument('--num_uks_per_cycle', type=int, default=2, help='Number of classes to mask each epoch, if cycling.')
         # parser.add_argument('--punish_uk_wrong', type=float, default=0, help='If not 0: Reward of its value for not classifying an unknown as unknown.')

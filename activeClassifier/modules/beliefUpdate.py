@@ -1,6 +1,8 @@
 import tensorflow as tf
 from tensorflow import distributions as tfd
 
+from tools.tf_tools import FiLM_layer
+
 
 class BeliefUpdate:
     def __init__(self, FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name='BeliefUpdate'):
@@ -53,11 +55,13 @@ class BeliefUpdate:
                     KLdiv = tf.where(self.current_cycl_uk_mask, tf.tile(tf.reduce_max(KLdiv, axis=1, keep_dims=True), [1, self.num_classes_kn]), KLdiv)
 
             # aggregate feedback
-            if self.normalise_fb:
+            if self.normalise_fb == 1:
                 # predError = batch_min_normalization(KLdiv, epsilon=0.1) - 1.  # SUFFERS FROM ERRORS BEING MUCH LOWER IF LOOKING INTO THE CORNERS
                 bl_surprise = self._surprise_bl([current_state['l'], current_state['s']])
                 predError = tf.maximum(KLdiv / (tf.stop_gradient(bl_surprise) + 0.01), 1.) - 1.
-                # predError = tf.Print(predError, [time, tf.reduce_min(predError, axis=0)], summarize=30)
+            elif self.normalise_fb == 2:
+                bl_surprise = self._surprise_bl([current_state['l'], current_state['s']])
+                predError = tf.maximum(KLdiv - (tf.stop_gradient(bl_surprise)), 0.)
             else:
                 predError, bl_surprise = KLdiv, tf.zeros([self.B])
             # TODO: INITIAL FB ADDS LOT OF NOISE AS IT OFTEN IS JUST EMPTY SPACE (MUCH LOWER ERROR). MAYBE IGNORE IT IN THE AGGREGATION? OR MAKE 1ST GLIMPSE PLANNED
@@ -128,11 +132,12 @@ class FullyConnectedUpdate(BeliefUpdate):
 
     def update_fn(self, current_state, predError, time, newly_done):
         # TODO: AGGREGATE THE RAW VALUES OR SOFTMAX AT EACH STEP?
-        fb = current_state['fb'] / tf.cast((time + 1), tf.float32)
+        avg_fb = current_state['fb'] / tf.cast((time + 1), tf.float32)
 
         with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
-            inputs = tf.stop_gradient(tf.concat([fb, current_state['s']], axis=1))
-            c_logits = tf.layers.dense(inputs, units=self.num_classes_kn)
+            inputs = tf.stop_gradient(tf.concat([avg_fb, current_state['s']], axis=1))
+            hidden = tf.layers.dense(inputs, units=self.num_classes_kn)
+            c_logits = FiLM_layer(tf.concat([avg_fb, tf.fill([self.B, 1], time)], axis=1), hidden)
             c = tf.nn.softmax(c_logits)
 
         current_state['c'] = tf.stop_gradient(c)

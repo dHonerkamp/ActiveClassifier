@@ -1,6 +1,8 @@
 import tensorflow as tf
 import math
 
+from tensorflow.contrib.distributions import Logistic
+
 TINY = 1e-8
 
 
@@ -38,6 +40,14 @@ def differential_entropy_normal(sigma, axis=-1):
     """Compute the differential entropy of a normal distribution. Can be negative!"""
     entr = tf.log(sigma * tf.sqrt(2 * math.pi * math.e) + TINY)
     return tf.reduce_sum(entr, axis)
+
+
+def differential_entropy_diag_normal(sigma, axis=-1):
+    """Compute the differential entropy of a normal distribution. Can be negative!"""
+    N = tf.cast(tf.shape(sigma)[axis], tf.float32)
+    det = tf.reduce_prod(sigma, axis)
+    entr = 0.5 * tf.log(tf.sqrt(2 * math.pi * math.e)**N * det)
+    return entr
 
 
 def write_zero_out(time, ta, candidate, done):
@@ -96,3 +106,16 @@ def expanding_mean(new_value, old_value, time):
     """
     time_1plus = time + 1
     return (1. / time_1plus) * new_value + (time_1plus - 1.) / time_1plus * old_value
+
+
+def exponential_mov_avg(tracked_var, avg_var, decay):
+    return decay * avg_var + (1 - decay) * tracked_var
+
+
+def pseudo_LogRelaxedBernoulli(logits, temperature):
+    return Logistic(loc=logits / temperature, scale=1 / temperature)
+
+
+# def LogRelaxedBernoulli_logprob(y, logits, temperature):
+#     diff = logits - temperature * y
+#     return tf.log(temperature) + diff - 2 * tf.log1p(tf.exp(diff))

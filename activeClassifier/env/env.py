@@ -1,6 +1,5 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib.layers import flatten
 from env.input_fn import input_fn
 
 class ImageForagingEnvironment:
@@ -76,7 +75,7 @@ class ImageForagingEnvironment:
                 glimpse = tf.image.extract_glimpse(self.img_NHWC, [self.scales[-1], self.scales[-1]], loc, uniform_noise=(self.padding == "uniform"))
 
             if self.num_scales == 1:
-                next_glimpse = flatten(glimpse)
+                next_glimpse = tf.layers.flatten(glimpse)
             else:
                 next_glimpse = self._multi_scale_glimpse(glimpse)
 

@@ -1,7 +1,8 @@
 import tensorflow as tf
 from tensorflow import distributions as tfd
+# from tensorflow.contrib.distributions import RelaxedBernoulli, Logistic
 
-from tools.tf_tools import FiLM_layer
+from tools.tf_tools import FiLM_layer, pseudo_LogRelaxedBernoulli
 
 
 class BeliefUpdate:
@@ -14,6 +15,7 @@ class BeliefUpdate:
         self.labels = labels
         self.normalise_fb = FLAGS.normalise_fb
         self.num_classes_kn = FLAGS.num_classes_kn
+        self.z_dist = FLAGS.z_dist
 
         self.uk_cycling = FLAGS.uk_cycling
         if self.uk_cycling:
@@ -29,9 +31,9 @@ class BeliefUpdate:
             zs_post: [B, num_classes, size_z] inferred zs conditional on each class
             glimpse_nll_stacked: [B, num_classes] likelihood of each past observation conditional on each class
             """
-        with tf.name_scope(self.name):
+        with tf.name_scope(self.name + '/'):
             # Infer posterior z for all hypotheses
-            with tf.name_scope('poterior_inference'):
+            with tf.name_scope('poterior_inference/'):
                 # TODO: SHOULD POSTERIOR GET THE current_state['s']?
                 z_post = self.m['VAEEncoder'].calc_post(new_observation,
                                                         current_state['l'])
@@ -40,19 +42,11 @@ class BeliefUpdate:
                                                             true_glimpse=new_observation)  # ^= filtering, given that transitions are deterministic
 
             # believes over the classes based on all past observations (uniformly weighted)
-            with tf.name_scope('prediction_feedback'):
+            with tf.name_scope('prediction_feedback/'):
                 # 2 possibilties to infer state from received observations:
                 # i)  judge by likelihood of the observations under each hypothesis
                 # ii) train a separate model (e.g. LSTM) for infering states
-                dist_post = tfd.Normal(loc=tf.tile(z_post['mu'][:, tf.newaxis, :], [1, self.n_policies, 1]),
-                                       scale=tf.tile(z_post['sigma'][:, tf.newaxis, :], [1, self.n_policies, 1]))
-                dist_prior = tfd.Normal(loc=exp_zs_prior['mu'], scale=exp_zs_prior['sigma'])
-                KLdiv = dist_post.kl_divergence(dist_prior)  # [B, hyp, z]
-                KLdiv = tf.reduce_sum(KLdiv, axis=2)
-
-                if self.uk_cycling:
-                    # mask the prediction error of the current uk classes with the highest prediction error of the observation
-                    KLdiv = tf.where(self.current_cycl_uk_mask, tf.tile(tf.reduce_max(KLdiv, axis=1, keep_dims=True), [1, self.num_classes_kn]), KLdiv)
+                KLdiv = self.calc_KLdiv(z_prior=exp_zs_prior, z_post=z_post)
 
             # aggregate feedback
             if self.normalise_fb == 1:
@@ -79,6 +73,34 @@ class BeliefUpdate:
                     loss,  # [B]
                     bl_surprise,  # [B]
                    )
+
+    def calc_KLdiv(self, z_prior, z_post):
+        post_mu    = tf.tile(z_post['mu'][:, tf.newaxis, :], [1, self.n_policies, 1])
+        post_sigma = tf.tile(z_post['sigma'][:, tf.newaxis, :], [1, self.n_policies, 1])
+        post_log_sample = tf.tile(z_post['log_sample'][:, tf.newaxis, :], [1, self.n_policies, 1])
+
+        if self.z_dist == 'N':
+            dist_prior = tfd.Normal(loc=z_prior['mu'], scale=z_prior['sigma'])
+            dist_post = tfd.Normal(loc=post_mu, scale=post_sigma)
+            KLdiv = dist_post.kl_divergence(dist_prior)  # [B, hyp, z]
+        elif self.z_dist == 'B':
+            # dist_prior = tfd.Bernoulli(logits=z_prior['mu'])
+            # dist_post = tfd.Bernoulli(logits=post_mu)
+            dist_prior = pseudo_LogRelaxedBernoulli(logits=z_prior['mu'], temperature=self.m['VAEEncoder'].temp_prior)
+            dist_post  = pseudo_LogRelaxedBernoulli(logits=post_mu, temperature=self.m['VAEEncoder'].temp_post)
+            log_diff = dist_post.log_prob(post_log_sample) - dist_prior.log_prob(post_log_sample)
+            KLdiv = dist_post.prob(post_log_sample) * log_diff  # [B, hyp, z]
+        else:
+            raise ValueError('Unknown z_dist: {}'.format(self.z_dist))
+
+        KLdiv = tf.reduce_sum(KLdiv, axis=2)
+
+        if self.uk_cycling:
+            # mask the prediction error of the current uk classes with the highest prediction error of the observation
+            KLdiv = tf.where(self.current_cycl_uk_mask, tf.tile(tf.reduce_max(KLdiv, axis=1, keep_dims=True), [1, self.num_classes_kn]), KLdiv)
+
+        return KLdiv
+
 
     def update_fn(self, current_state, predError, time, newly_done):
         current_state, loss = None, None

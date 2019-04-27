@@ -63,11 +63,11 @@ class Utility(object):
 
     @staticmethod
     def set_exp_name(FLAGS):
-        experiment_name = '{}gl_{}_{}_bs{}_MC{}_preTr{}{}uk{}_dcay{}_lr{}_{}sc{}_lstd{}_glstd{}_z{}_fbN{}'.format(
-                FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples,
-                FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk,
-                FLAGS.learning_rate_decay_factor, FLAGS.learning_rate,
-                len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.loc_std, FLAGS.gl_std, FLAGS.size_z, FLAGS.normalise_fb)
+        experiment_name  = '{}gl_{}_{}_bs{}_MC{}_'.format(FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples)
+        experiment_name += 'preTr{}{}uk{}_'.format(FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk)
+        experiment_name += 'lr{}dc{}_'.format(FLAGS.learning_rate, FLAGS.learning_rate_decay_factor)
+        experiment_name += '{}sc{}_lstd{}_glstd{}_'.format(len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.loc_std, FLAGS.gl_std)
+        experiment_name += 'z{}{}C{}_fbN{}'.format(FLAGS.size_z, FLAGS.z_dist, FLAGS.z_B_center, FLAGS.normalise_fb)
         if FLAGS.use_conv:
             experiment_name += '_CNN'
         if FLAGS.uk_folds:
@@ -139,6 +139,8 @@ class Utility(object):
         parser.add_argument('--normalise_fb', type=int, default=0, choices=[0, 1, 2], help='Use min_normalisation for prediction fb or not. 1: divide by baseline, 1: subtract baseline')
         parser.add_argument('--prior_preference_c', type=int, default=2, help='Strength of preferences for correct / wrong classification.')
         parser.add_argument('--size_z', type=int, default=32, help='Dimensionality of the hidden states z.')
+        parser.add_argument('--z_dist', type=str, default='B', choices=['N', 'B'], help='Distributions of the hidden state. N: normal, B: bernoulli.')
+        parser.add_argument('--z_B_center', type=int, default=0, choices=[0, 1], help='For bernoulli latent code only: center the logits.')
         parser.add_argument('--num_hidden_fc', type=int, default=512, help='Standard size of fully connected layers.')
         parser.add_argument('--use_conv', type=int, default=0, choices=[0, 1], help='Whether to use a convolutional encoder/decoder instead of fc.')
         parser.add_argument('--size_rnn', type=int, default=256, help='Size of the RNN cell.')

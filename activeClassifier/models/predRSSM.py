@@ -34,7 +34,7 @@ class predRSSM(base.Base):
         # Initialise modules
         n_policies = FLAGS.num_classes_kn if FLAGS.planner == 'ActInf' else 1
         policyNet = PolicyNetwork(FLAGS, self.B, n_policies)
-        VAEencoder   = Encoder(FLAGS, env.patch_shape)
+        VAEencoder   = Encoder(FLAGS, env.patch_shape, self.is_training)
         VAEdecoder   = Decoder(FLAGS, env.patch_shape_flat)
         stateTransition = StateTransition(FLAGS, FLAGS.size_rnn)
         fc_baseline = tf.layers.Dense(1, name='fc_baseline')

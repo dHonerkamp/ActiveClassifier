@@ -26,11 +26,18 @@ def get_MNIST(FLAGS):
     test  = (np.reshape(x_test, [x_test.shape[0]]   + FLAGS.img_shape), np.array(y_test, dtype=np.int32))
 
     if FLAGS.binarize_MNIST:
-        def binarize(images, threshold=0.1):
+        def binarize_det(images, threshold=0.1):
+            """Deterministic convertion into binary image. Threshold as in Deepmind's UCL module 2018."""
             return (threshold < images).astype('float32')
 
-        train = (binarize(train[0]), train[1])
-        valid = (binarize(valid[0]), valid[1])
-        test  = (binarize(test[0]), test[1])
+        def binarize_stoc(images):
+            """Following https://www.cs.toronto.edu/~rsalakhu/papers/dbn_ais.pdf, which seems to be the standard reference for binarized MNIST.
+            Convert stochastically into binary pixels proportionate to the picels intensities."""
+            return np.random.binomial(1, images).astype('float32')
+
+        train = (binarize_stoc(train[0]), train[1])
+        import matplotlib.pyplot as plt
+        valid = (binarize_stoc(valid[0]), valid[1])
+        test  = (binarize_stoc(test[0]), test[1])
 
     return train, valid, test

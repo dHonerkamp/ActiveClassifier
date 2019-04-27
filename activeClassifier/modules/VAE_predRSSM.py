@@ -62,7 +62,7 @@ class Encoder:
             sigma = tf.layers.dense(hidden, self.size_z, tf.nn.softplus, name='sigma')
             sigma += self._min_stddev
         else:
-            sigma = tf.zeros_like(mu)
+            sigma = None
 
         # TODO: NOT SURE IF EMA WORKS A HUNDRED PERCENT CORRECTLY
         mu = self._centering(mu, self.ema_prior)

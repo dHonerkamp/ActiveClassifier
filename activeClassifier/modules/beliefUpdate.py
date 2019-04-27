@@ -76,14 +76,16 @@ class BeliefUpdate:
 
     def calc_KLdiv(self, z_prior, z_post):
         post_mu    = tf.tile(z_post['mu'][:, tf.newaxis, :], [1, self.n_policies, 1])
-        post_sigma = tf.tile(z_post['sigma'][:, tf.newaxis, :], [1, self.n_policies, 1])
-        post_log_sample = tf.tile(z_post['log_sample'][:, tf.newaxis, :], [1, self.n_policies, 1])
 
         if self.z_dist == 'N':
+            post_sigma = tf.tile(z_post['sigma'][:, tf.newaxis, :], [1, self.n_policies, 1])
+
             dist_prior = tfd.Normal(loc=z_prior['mu'], scale=z_prior['sigma'])
             dist_post = tfd.Normal(loc=post_mu, scale=post_sigma)
             KLdiv = dist_post.kl_divergence(dist_prior)  # [B, hyp, z]
         elif self.z_dist == 'B':
+            post_log_sample = tf.tile(z_post['log_sample'][:, tf.newaxis, :], [1, self.n_policies, 1])
+
             # dist_prior = tfd.Bernoulli(logits=z_prior['mu'])
             # dist_post = tfd.Bernoulli(logits=post_mu)
             dist_prior = pseudo_LogRelaxedBernoulli(logits=z_prior['mu'], temperature=self.m['VAEEncoder'].temp_prior)

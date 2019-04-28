@@ -224,11 +224,14 @@ def get_data(FLAGS):
 
     # ensure flags are set correctly
     assert FLAGS.num_classes - FLAGS.num_classes_kn in [0, 1]
-    assert (FLAGS.num_classes == len(set(train[1]))) or (FLAGS.uk_cycling and (FLAGS.num_classes == len(set(train[1])) + 1))
-    if FLAGS.uk_label and not FLAGS.uk_cycling:
-        assert FLAGS.num_classes_kn == len(set(train[1])) - 1
+    num_classes_train = len(set(train[1]))
+    assert ((FLAGS.num_classes == num_classes_train)  # no uks
+            or (FLAGS.num_classes == num_classes_train + 1 and FLAGS.num_uk_train == 0 and not FLAGS.uk_train_labels)  # no train uks
+            or (FLAGS.num_classes == num_classes_train + 1 and FLAGS.uk_cycling))
+    if FLAGS.uk_label and not FLAGS.uk_cycling and (FLAGS.num_uk_train or FLAGS.uk_train_labels):
+        assert FLAGS.num_classes_kn == num_classes_train - 1
     else:
-        assert FLAGS.num_classes_kn == len(set(train[1]))
+        assert FLAGS.num_classes_kn == num_classes_train
 
     FLAGS.train_batches_per_epoch = np.ceil(train[0].shape[0] / FLAGS.batch_size).astype(int)
     FLAGS.batches_per_eval_valid  = np.ceil(valid[0].shape[0] / FLAGS.batch_size).astype(int)

@@ -162,14 +162,13 @@ class Utility(object):
         parser.add_argument('--num_uk_train', type=int, default=0, help='Number of unknown classes during training. Scheirer et al.: 0')
         parser.add_argument('--num_uk_test', type=int, default=0, help='Number of unknown classes during test. Scheirer et al.: [0-4]')
         parser.add_argument('--num_uk_test_used', type=int, default=0, help='Varying openness. Number of "uk_test_labels" that are actually included in the test set. Starting from the last label in uk_test_labels. Only relevant if uk_test_labels != -1.')
-        # parser.add_argument('--uk_pct', type=float, default=.5, help='Share of unknowns to add in. Only on MNIST_OMNI_notMNIST atm.')
         # Directly setting UK labels
         parser.add_argument('--uk_test_labels', nargs='+', type=int, default=None,  # [6, 7, 8, 9],
                             help='List of labels to exclude from training set. None to ignore (0 means class 0!). '
                                  '(REMASKING FOR OMNIGLOT MIGHT NOT WORK ANYMORE, AS IT USED TO BE A NUMBER OF ALPHABETS IN THAT CASE).')
         parser.add_argument('--uk_train_labels', nargs='+', type=int, default=None, help='List of labels to set to unknown, but keep in training set. None to ignore.')
         # use uks from different datasets (MNIST_OMNI_notMNIST dataset)
-        parser.add_argument('--uk_pct', type=float, default=0.3, help='Share of the dataset to be added as uks (resulting total observations = 100*(1 + uk_pct)%')
+        parser.add_argument('--uk_pct', type=float, default=0.3, help='MNIST_OMNI_notMNIST only: share of the dataset to be added as uks (resulting total observations = 100*(1 + uk_pct)%')
         # uk cycling
         # TODo: ATM DON'T HAVE ANY UK IN THE VALIDATION SET. BUT HAVE TO KEEP THE IS_TRAINING CONDITION, O/W WILL DO IT DURING TEST AS WELL
         parser.add_argument('--uk_cycling', type=int, default=0, help='Whether to mask random known classes as uk each batch (whose predictions will be masked). Value determines how many uk classes to draw each batch.')
@@ -214,33 +213,33 @@ class Utility(object):
 
     @staticmethod
     def init():
-        # add custom formatter to root logger for simple demonstration
-        handler = logging.StreamHandler()
-        handler.setFormatter(ElapsedFormatter())
-        logging.getLogger().addHandler(handler)
-
-        logging.getLogger().setLevel(logging.INFO)
-        logging.info(sys.argv)
-        # os.environ['TF_CPP_MIN_VLOG_LEVEL'] = '2'
-
-        Utility.set_seeds()
-
         # Parsing experimental set up
         FLAGS, unparsed = Utility.parse_arg()
-        if unparsed:
-            logging.info('UNPARSED: {}'.format(unparsed))
-        # set img_shape, padding, num_classes according to dataset (ignoring cl inputs!)
         Utility.auto_adjust_flags(FLAGS)
         experiment_name = Utility.set_exp_name(FLAGS)
 
-        t_sz = (str(FLAGS.translated_size) if FLAGS.translated_size else "")
-        resz = (str(FLAGS.img_resize if FLAGS.img_resize else ""))
-        FLAGS.path = os.path.join(FLAGS.summaries_dir, FLAGS.dataset + t_sz + resz, experiment_name)
+        folder = '{d}{tsz}{resz}{uk}'.format(d=FLAGS.dataset, tsz=FLAGS.translated_size or '', resz=FLAGS.img_resize or '',
+                                             uk = '_UK' if FLAGS.num_uk_test or FLAGS.uk_test_labels else '')
+        FLAGS.path = os.path.join(FLAGS.summaries_dir, folder, experiment_name)
         os.makedirs(FLAGS.path, exist_ok=True)
 
-        with open(os.path.join(FLAGS.path, 'argparse.txt'),'w+') as f:
-            f.write(' '.join(sys.argv))
+        # define logger
+        logger = logging.getLogger()
+        file_handler = logging.FileHandler(os.path.join(FLAGS.path, 'log.log'))
+        file_handler.setFormatter(ElapsedFormatter())
+        logger.addHandler(file_handler)
 
+        logger.setLevel(logging.INFO)
+        # os.environ['TF_CPP_MIN_VLOG_LEVEL'] = '2'
+
+        if unparsed:
+            logging.info('UNPARSED: {}'.format(unparsed))
+        logging.info(sys.argv)
+
+        # reproducibility (not guaranteed if run on GPU or different platforms)
+        Utility.set_seeds()
+
+        # session config
         config = tf.ConfigProto()
         config.allow_soft_placement = True
         if FLAGS.gpu_fraction:

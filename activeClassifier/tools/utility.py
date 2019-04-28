@@ -140,6 +140,7 @@ class Utility(object):
         parser.add_argument('--prior_preference_c', type=int, default=2, help='Strength of preferences for correct / wrong classification.')
         parser.add_argument('--size_z', type=int, default=32, help='Dimensionality of the hidden states z.')
         parser.add_argument('--z_dist', type=str, default='B', choices=['N', 'B'], help='Distributions of the hidden state. N: normal, B: bernoulli.')
+        parser.add_argument('--z_B_kl', type=int, default=0, choices=[20, 21, 22], help='For bernoulli latent code only: type of KL divergence. Corresponds to equations in https://arxiv.org/abs/1611.00712.')
         parser.add_argument('--z_B_center', type=int, default=0, choices=[0, 1], help='For bernoulli latent code only: center the logits.')
         parser.add_argument('--num_hidden_fc', type=int, default=512, help='Standard size of fully connected layers.')
         parser.add_argument('--use_conv', type=int, default=0, choices=[0, 1], help='Whether to use a convolutional encoder/decoder instead of fc.')

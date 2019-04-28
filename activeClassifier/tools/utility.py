@@ -64,9 +64,9 @@ class Utility(object):
     @staticmethod
     def set_exp_name(FLAGS):
         experiment_name  = '{}gl_{}_{}_bs{}_MC{}_'.format(FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples)
-        experiment_name += 'preTr{}{}uk{}_'.format(FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk)
         experiment_name += 'lr{}dc{}_'.format(FLAGS.learning_rate, FLAGS.learning_rate_decay_factor)
         experiment_name += '{}sc{}_lstd{}_glstd{}_'.format(len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.loc_std, FLAGS.gl_std)
+        experiment_name += 'preTr{}{}uk{}_'.format(FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk) if FLAGS.pre_train_epochs else ''
         experiment_name += 'z{}{}C{}_fbN{}'.format(FLAGS.size_z, FLAGS.z_dist, FLAGS.z_B_center, FLAGS.normalise_fb)
         if FLAGS.use_conv:
             experiment_name += '_CNN'

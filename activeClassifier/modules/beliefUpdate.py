@@ -91,7 +91,8 @@ class BeliefUpdate:
             dist_prior = pseudo_LogRelaxedBernoulli(logits=z_prior['mu'], temperature=self.m['VAEEncoder'].temp_prior)
             dist_post  = pseudo_LogRelaxedBernoulli(logits=post_mu, temperature=self.m['VAEEncoder'].temp_post)
             log_diff = dist_post.log_prob(post_log_sample) - dist_prior.log_prob(post_log_sample)
-            KLdiv = dist_post.prob(post_log_sample) * log_diff  # [B, hyp, z]
+            # KLdiv = dist_post.prob(post_log_sample) * log_diff  # [B, hyp, z]
+            KLdiv = log_diff  # [B, hyp, z]
         else:
             raise ValueError('Unknown z_dist: {}'.format(self.z_dist))
 

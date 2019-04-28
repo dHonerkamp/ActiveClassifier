@@ -1,7 +1,6 @@
 import tensorflow as tf
 from tensorflow import distributions as tfd
 
-
 from tools.tf_tools import FiLM_layer, pseudo_LogRelaxedBernoulli, exponential_mov_avg
 from tools.MSE_distribution import MSEDistribution
 

@@ -75,7 +75,7 @@ class BeliefUpdate:
                    )
 
     def calc_KLdiv(self, z_prior, z_post):
-        post_mu    = tf.tile(z_post['mu'][:, tf.newaxis, :], [1, self.n_policies, 1])
+        post_mu = tf.tile(z_post['mu'][:, tf.newaxis, :], [1, self.n_policies, 1])
 
         if self.z_dist == 'N':
             post_sigma = tf.tile(z_post['sigma'][:, tf.newaxis, :], [1, self.n_policies, 1])
@@ -84,15 +84,16 @@ class BeliefUpdate:
             dist_post = tfd.Normal(loc=post_mu, scale=post_sigma)
             KLdiv = dist_post.kl_divergence(dist_prior)  # [B, hyp, z]
         elif self.z_dist == 'B':
-            post_log_sample = tf.tile(z_post['log_sample'][:, tf.newaxis, :], [1, self.n_policies, 1])
+            # replace discrete mass with the analytic discrete KL: not a true lower bound, be aware of overfitting on spurious elements in this 'KL'
+            dist_prior = tfd.Bernoulli(logits=z_prior['mu'])
+            dist_post = tfd.Bernoulli(logits=post_mu)
+            KLdiv = dist_post.kl_divergence(dist_prior)  # [B, hyp, z]
 
-            # dist_prior = tfd.Bernoulli(logits=z_prior['mu'])
-            # dist_post = tfd.Bernoulli(logits=post_mu)
-            dist_prior = pseudo_LogRelaxedBernoulli(logits=z_prior['mu'], temperature=self.m['VAEEncoder'].temp_prior)
-            dist_post  = pseudo_LogRelaxedBernoulli(logits=post_mu, temperature=self.m['VAEEncoder'].temp_post)
-            log_diff = dist_post.log_prob(post_log_sample) - dist_prior.log_prob(post_log_sample)
-            # KLdiv = dist_post.prob(post_log_sample) * log_diff  # [B, hyp, z]
-            KLdiv = log_diff  # [B, hyp, z]
+            # # Monte carlo approximation on the logistic node (a true lower bound but can exhibit higher variance)
+            # post_log_sample = tf.tile(z_post['log_sample'][:, tf.newaxis, :], [1, self.n_policies, 1])
+            # dist_prior = pseudo_LogRelaxedBernoulli(logits=z_prior['mu'], temperature=self.m['VAEEncoder'].temp_prior)
+            # dist_post  = pseudo_LogRelaxedBernoulli(logits=post_mu, temperature=self.m['VAEEncoder'].temp_post)
+            # KLdiv = dist_post.log_prob(post_log_sample) - dist_prior.log_prob(post_log_sample)  # [B, hyp, z]
         else:
             raise ValueError('Unknown z_dist: {}'.format(self.z_dist))
 

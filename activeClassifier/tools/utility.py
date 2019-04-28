@@ -67,7 +67,7 @@ class Utility(object):
         experiment_name += 'lr{}dc{}_'.format(FLAGS.learning_rate, FLAGS.learning_rate_decay_factor)
         experiment_name += '{}sc{}_lstd{}_glstd{}_'.format(len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.loc_std, FLAGS.gl_std)
         experiment_name += 'preTr{}{}uk{}_'.format(FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk) if FLAGS.pre_train_epochs else ''
-        experiment_name += 'z{}{}C{}_fbN{}'.format(FLAGS.size_z, FLAGS.z_dist, FLAGS.z_B_center, FLAGS.normalise_fb)
+        experiment_name += 'z{sz}{d}{kl}C{c}_fbN{n}'.format(sz=FLAGS.size_z, d=FLAGS.z_dist, kl=FLAGS.z_B_kl, c=FLAGS.z_B_center, n=FLAGS.normalise_fb)
         if FLAGS.use_conv:
             experiment_name += '_CNN'
         if FLAGS.uk_folds:
@@ -140,8 +140,8 @@ class Utility(object):
         parser.add_argument('--prior_preference_c', type=int, default=2, help='Strength of preferences for correct / wrong classification.')
         parser.add_argument('--size_z', type=int, default=32, help='Dimensionality of the hidden states z.')
         parser.add_argument('--z_dist', type=str, default='B', choices=['N', 'B'], help='Distributions of the hidden state. N: normal, B: bernoulli.')
-        parser.add_argument('--z_B_kl', type=int, default=0, choices=[20, 21, 22], help='For bernoulli latent code only: type of KL divergence. Corresponds to equations in https://arxiv.org/abs/1611.00712.')
-        parser.add_argument('--z_B_center', type=int, default=0, choices=[0, 1], help='For bernoulli latent code only: center the logits.')
+        parser.add_argument('--z_B_kl', type=int, default=22, choices=[20, 21, 22], help='Bernoulli latent code only: type of KL divergence. Corresponds to equations in https://arxiv.org/abs/1611.00712.')
+        parser.add_argument('--z_B_center', type=int, default=0, choices=[0, 1], help='Bernoulli latent code only: center the logits.')
         parser.add_argument('--num_hidden_fc', type=int, default=512, help='Standard size of fully connected layers.')
         parser.add_argument('--use_conv', type=int, default=0, choices=[0, 1], help='Whether to use a convolutional encoder/decoder instead of fc.')
         parser.add_argument('--size_rnn', type=int, default=256, help='Size of the RNN cell.')

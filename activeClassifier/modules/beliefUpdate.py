@@ -98,7 +98,6 @@ class BeliefUpdate:
                 # replace discrete mass with the analytic discrete KL: not a true lower bound, be aware of overfitting on spurious elements in this 'KL'
                 dist_prior = tfd.Bernoulli(logits=z_prior['mu'])
                 dist_post = tfd.Bernoulli(logits=post_mu)
-                dist_post = tf.Print(dist_post, [dist_post.sample()])
                 KLdiv = dist_post.kl_divergence(dist_prior)  # [B, hyp, z]
             else:
                 raise ValueError('Unknown z_B_kl: {}'.format(self.z_B_kl))

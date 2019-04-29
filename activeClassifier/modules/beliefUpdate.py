@@ -60,10 +60,8 @@ class BeliefUpdate:
             else:
                 predError, bl_surprise = KLdiv, tf.zeros([self.B])
             # TODO: INITIAL FB ADDS LOT OF NOISE AS IT OFTEN IS JUST EMPTY SPACE (MUCH LOWER ERROR). MAYBE IGNORE IT IN THE AGGREGATION? OR MAKE 1ST GLIMPSE PLANNED
-            if time == 1:
-                current_state['fb'] = predError
-            else:
-                current_state['fb'] += predError
+            # current_state['fb'] = predError if time == 1 else current_state['fb'] + predError
+            current_state['fb'] += predError
             current_state, loss = self.update_fn(current_state, KLdiv, time, newly_done)
 
             return (current_state,
@@ -111,7 +109,6 @@ class BeliefUpdate:
             KLdiv = tf.where(self.current_cycl_uk_mask, tf.tile(tf.reduce_max(KLdiv, axis=1, keep_dims=True), [1, self.num_classes_kn]), KLdiv)
 
         return KLdiv
-
 
     def update_fn(self, current_state, predError, time, newly_done):
         current_state, loss = None, None
@@ -189,7 +186,6 @@ class RAMUpdate(BeliefUpdate):
         with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
             inputs = current_state['s']
             c_logits = tf.layers.dense(inputs, units=self.num_classes_kn)
-             # TODO; ONLY TRAIN ON FINAL DECISION LOSS
             c = tf.nn.softmax(c_logits)
 
         current_state['c'] = tf.stop_gradient(c)
@@ -197,5 +193,5 @@ class RAMUpdate(BeliefUpdate):
 
     def loss(self, logits, newly_done):
         """Only train on last decision"""
-        loss = 100 * tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.labels, logits=logits)
+        loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.labels, logits=logits)
         return tf.where(newly_done, loss, tf.zeros_like(loss))

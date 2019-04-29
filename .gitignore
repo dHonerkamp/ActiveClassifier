@@ -1,6 +1,7 @@
 # Byte-compiled / optimized / DLL files
 *.py[cod]
 *.idea/
+*.ipynb_checkpoints
 
 # Directories
 activeClassifier/deployment/
@@ -13,3 +14,7 @@ activeClassifier/data/
 *.out
 .toc
 *.synctex.gz
+
+# Files
+activeClassifier/metrics_overview.ipynb
+activeClassifier/tools/gumbel_softmax.py

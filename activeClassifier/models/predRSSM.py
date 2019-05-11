@@ -5,7 +5,8 @@ from models import base
 from tools.tf_tools import write_zero_out
 from modules.policyNetwork import PolicyNetwork
 from modules.VAE_predRSSM import Encoder, Decoder
-from modules.planner_predRSSM import ActInfPlanner, REINFORCEPlanner
+from modules.planner.ActInfPlanner import ActInfPlanner
+from modules.planner.REINFORCEPlanner import REINFORCEPlanner
 from modules.stateTransition import StateTransition
 from modules.beliefUpdate import PredErrorUpdate, FullyConnectedUpdate, RAMUpdate
 
@@ -164,7 +165,7 @@ class predRSSM(base.Base):
             self.nll_posterior = ta_d['nll_posterior'].stack()  # [T,B,hyp]
             self.KLdivs = ta_d['KLdivs'].stack()  # [T,B,hyp]
             self.state_believes = ta_d['current_c'].stack()  # [T+1,B,hyp]
-            self.G = ta_d['G'].stack()  # not zero'd-out so far!
+            self.G = ta_d['G'].stack()  # [T,B,n_policies incl. correct/wrong fb]
             bl_loc = ta_d['baselines'].stack()
             self.reconstr_posterior = ta_d['reconstr_posterior'].stack()  # [T,B,hyp,glimpse]
             current_s = ta_d['current_s'].stack()  # [T,B,rnn]
@@ -250,6 +251,8 @@ class predRSSM(base.Base):
             metrics_upd_coll = "streaming_updates"
 
             self.acc = tf.reduce_mean(tf.cast(tf.equal(self.y_MC, classification_decision), tf.float32))  # only to get easy direct intermendiate outputs
+            self.avg_G = tf.reduce_mean(self.G, axis=[1])  # [T, n_policies]
+
             scalars = {'Main/loss': self.loss,
                        'Main/acc': self.acc,
                        'loss/VAE_nll_post': nll_post,

@@ -12,6 +12,10 @@ from visualisation.visualise_predRSSM import Visualization_predRSSM
 # from visualisation.visualise_ActCl import Visualization_ActCl
 from phase_config import get_phases
 
+# only to display G matrix
+import numpy as np
+np.set_printoptions(precision=2)
+
 
 def evaluate(FLAGS, sess, model, feed, num_batches, writer, visual=None):
     fetch = {'summary'            : model.summary,
@@ -45,7 +49,7 @@ def evaluate(FLAGS, sess, model, feed, num_batches, writer, visual=None):
         visual.plot_stateBelieves(batch_values, suffix=sfx)
 
     prefix = writer.get_logdir().split('/')[-1].upper() + ':'
-    strs = [item for pair in zip(model.metrics_names, out["metrics"]) for item in pair] + ['f1', f1]
+    strs = [item for pair in sorted(zip(model.metrics_names, out["metrics"])) for item in pair] + ['f1', f1]
     s = 'step {} - phase {} - {}'.format(out['step'], out['phase'], prefix) + len(strs) // 2 * ' {}: {:.3f}'
     logging.info(s.format(*strs))
 
@@ -72,11 +76,19 @@ def training_loop(FLAGS, sess, model, handles, writers, phase):
 
         for i in range(FLAGS.train_batches_per_epoch):
             if i and (i % 100 == 0):
-                step, train_summ = sess.run([model.global_step, model.summary], feed_dict=feeds['eval_train'])
-                step, valid_summ, loss, acc, T, acc_uk, acc_kn = sess.run([model.global_step, model.summary, model.loss, model.acc, model.avg_T, model.acc_uk, model.acc_kn], feed_dict=feeds['eval_valid'])
-                writers['train'].add_summary(train_summ, global_step=step)
-                writers['valid'].add_summary(valid_summ, global_step=step)
-                print('{}/{}, loss: {:.3f}, acc: {:.3f}, T: {:.3f}, acc_kn: {:.3f}, acc_uk: {:.3f}'.format(i, FLAGS.train_batches_per_epoch, loss, acc, T, acc_kn, acc_uk))
+                eval_stats = {'step': model.global_step, 'summary': model.summary, 'loss': model.loss, 'acc': model.acc, 'T': model.avg_T, 'acc_kn': model.acc_uk, 'acc_uk': model.acc_kn, 'G': model.avg_G}
+                out_train = sess.run(eval_stats, feed_dict=feeds['eval_train'])
+                out_valid = sess.run(eval_stats, feed_dict=feeds['eval_valid'])
+                writers['train'].add_summary(out_train.pop('summary'), global_step=out_train.pop('step'))
+                writers['valid'].add_summary(out_valid.pop('summary'), global_step=out_valid.pop('step'))
+                # out_train.pop('G')
+                # print(out_valid.pop('G'))
+                stats = ['{}: {:.3f}'.format(k, v) for k, v in out_valid.items() if not hasattr(v, "__len__")]
+                print('{}/{}, '.format(i, FLAGS.train_batches_per_epoch) + ' '.join(stats))
+                # train
+                # print(out_train.pop('G'))
+                stats = ['{}: {:.3f}'.format(k, v) for k, v in out_train.items() if not hasattr(v, "__len__")]
+                print('{}/{}, '.format(i, FLAGS.train_batches_per_epoch) + ' '.join(stats))
             else:
                 sess.run(train_op, feed_dict=feeds['train'])
 

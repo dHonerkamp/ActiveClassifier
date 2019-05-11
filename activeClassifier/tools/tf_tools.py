@@ -30,7 +30,11 @@ def entropy(probs=None, logits=None, axis=-1):
       raise ValueError("Must pass probs or logits, but not both.")
 
   if logits is not None:
-      plogp = tf.nn.softmax(logits, axis) * tf.nn.log_softmax(logits, axis)
+      if axis is None:
+          plogp = tf.nn.sigmoid(logits) * tf.log(tf.nn.sigmoid(logits) + TINY)
+          axis = -1
+      else:
+          plogp = tf.nn.softmax(logits, axis) * tf.nn.log_softmax(logits, axis)
   else:
       plogp = probs * tf.log(probs + TINY)
   return -tf.reduce_sum(plogp, axis)

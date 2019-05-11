@@ -2,67 +2,10 @@ import tensorflow as tf
 from tensorflow import distributions as tfd
 
 from tools.tf_tools import repeat_axis, entropy, differential_entropy_normal, differential_entropy_diag_normal
+from modules.planner.base import Base
 
 
-class Planner:
-    def __init__(self, FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition):
-        self.B = batch_sz
-        self.num_classes = FLAGS.num_classes
-        self.num_classes_kn = FLAGS.num_classes_kn
-        self.uk_label = FLAGS.uk_label
-        self.size_z = FLAGS.size_z
-        self.loc_dim = FLAGS.loc_dim
-        self.patch_shape_flat = patch_shape_flat
-        self.stateTransition = stateTransition
-        self.m = submodules
-
-    def random_policy(self):
-        return [tf.fill([self.B], -1)] + list(self.m['policyNet'].random_loc()) + [self.zero_records]
-
-    def planning_step(self, current_state, z_samples, time, is_training):
-        return
-
-    def _best_believe(self, state):
-        best_belief = tf.argmax(state['c'], axis=1, output_type=tf.int32)
-        # TODO: IF THRESHOLD FOR UK CLASSIFICATION IS NOT LEARNED (EG. JUST WORSE THAN THE 99TH PERCENTILE OF THE PAST OR SMTH), THEN WE COULD ALSO OUTPUT UNKNOWN
-        # TODO: CLFS WHEN TRAINING ON ONLY KNOWNS (WHICH WOULD HOPEFULLY DETECT WEIRD EXAMPLES / OUTLIERS)
-        if self.uk_label is not None:
-            best_belief = tf.where(tf.greater(state['uk_belief'], tf.reduce_max(state['c'], axis=1)), tf.fill([self.B], self.uk_label), best_belief)
-        return best_belief
-
-    def single_policy_prediction(self, state, z_samples=None, next_actions=None):
-        if z_samples is not None:
-            state = self.stateTransition([z_samples, next_actions], state)
-
-        hyp = tf.tile(tf.one_hot(tf.range(self.num_classes_kn), depth=self.num_classes_kn), [self.B, 1])
-        new_s_tiled = repeat_axis(state['s'], axis=0, repeats=self.num_classes_kn)  # [B, rnn] -> [B * hyp, rnn]
-        new_l_tiled = repeat_axis(state['l'], axis=0, repeats=self.num_classes_kn)  # [B, loc] -> [B * hyp, loc]
-
-        exp_obs = self.m['VAEEncoder'].calc_prior(hyp,
-                                                  new_s_tiled,
-                                                  new_l_tiled)
-
-        return {k: tf.reshape(v, [self.B, self.num_classes_kn, -1]) if (v is not None) else None for k, v in exp_obs.items()}
-
-    def initial_planning(self):
-        selected_action, selected_action_mean = self.m['policyNet'].inital_loc()
-        new_state = self.stateTransition.initial_state(self.B, selected_action)
-        selected_exp_obs = self.single_policy_prediction(new_state)  # [B, num_classes, m['VAEEncoder'].output_size]
-        decision = tf.fill([self.B], -1)
-
-        return new_state, decision, selected_action, selected_action_mean, selected_exp_obs, self.zero_records
-
-    @property
-    def zero_records(self):
-        return {'G'                : tf.zeros([self.B, self.n_policies + 1]),
-                'exp_obs'          : tf.zeros([self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size]),
-                'exp_exp_obs'      : tf.zeros([self.B, self.n_policies, self.m['VAEEncoder'].output_size]),
-                'H_exp_exp_obs'    : tf.zeros([self.B, self.n_policies]),
-                'exp_H'            : tf.zeros([self.B, self.n_policies]),
-                'potential_actions': tf.zeros([self.B, self.n_policies, self.loc_dim])}
-
-
-class ActInfPlanner(Planner):
+class ActInfPlanner(Base):
     def __init__(self, FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition, C):
         super().__init__(FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition)
         self.n_policies = FLAGS.num_classes_kn
@@ -108,12 +51,14 @@ class ActInfPlanner(Planner):
                 exp_obs = tf.reshape(exp_obs_prior['mu'], [self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size])  # [B, n_policies, hyp, glimpse]
                 if self.z_dist == 'B':
                     exp_obs_flat = tf.reshape(exp_obs, [self.B * self.n_policies * self.num_classes_kn, self.m['VAEEncoder'].output_size])
-                    H = entropy(logits=exp_obs_flat)  # [B * n_policies * hyp]
+                    H = entropy(logits=exp_obs_flat, axis=None)  # [B * n_policies * hyp]
                 elif self.z_dist == 'N':
                     exp_obs_sigma = tf.reshape(exp_obs_prior['sigma'], [self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size])  # [B, n_policies, hyp, glimpse]
                     exp_obs_sigma_flat = tf.reshape(exp_obs_sigma, [self.B * self.n_policies * self.num_classes_kn, self.m['VAEEncoder'].output_size])
                     # H = differential_entropy_normal(exp_obs_sigma_flat)  # [B * n_policies * hyp]
                     H = differential_entropy_diag_normal(exp_obs_sigma_flat)  # [B * n_policies * hyp]
+                else:
+                    raise ValueError('Unknown z_dist: {}'.format(self.z_dist))
 
                 H = tf.reshape(H, [self.B * self.n_policies, self.num_classes_kn])
                 new_c_tiled = repeat_axis(new_state['c'], axis=0, repeats=self.n_policies)  # [B, hyp] -> [B * n_policies, hyp]
@@ -122,7 +67,8 @@ class ActInfPlanner(Planner):
             # Entropy of the expectation
             exp_exp_obs = tf.einsum('bh,bkhg->bkg', new_state['c'], exp_obs)  # [B, n_policies, glimpse]
             exp_exp_obs_flat = tf.reshape(exp_exp_obs, [self.B * self.n_policies, self.m['VAEEncoder'].output_size])
-            H_exp_exp_obs = entropy(logits=exp_exp_obs_flat)  # [B * n_policies]
+            # TODO: HOW TO DO THIS FOR NORMAL DISTRIBUTED CODE?
+            H_exp_exp_obs = entropy(logits=exp_exp_obs_flat, axis=None)  # [B * n_policies]
 
             # For all non-decision actions the probability of classifying is 0, hence the probability of an observation is 1
             preference_error = 1. * self.C[time, 0]
@@ -164,7 +110,8 @@ class ActInfPlanner(Planner):
         coords = tf.stack(tf.meshgrid(tf.range(self.B)) + [selected_action_idx], axis=1)
         selected_action      = tf.gather_nd(next_actions, coords)
         selected_action_mean = tf.gather_nd(next_actions_mean, coords)
-        selected_exp_obs     = {k: tf.gather_nd(tf.reshape(v, [self.B, self.n_policies, self.num_classes_kn, -1]), coords) for k, v in exp_obs_prior.items()}
+        selected_exp_obs     = {k: tf.gather_nd(tf.reshape(v, [self.B, self.n_policies, self.num_classes_kn, -1]), coords) if (v is not None) else None
+                                for k, v in exp_obs_prior.items()}
 
         records = {'G'                : G,
                    'exp_obs'          : exp_obs,  # [B, n_policies, num_classes, -1]
@@ -173,40 +120,3 @@ class ActInfPlanner(Planner):
                    'exp_H'            : tf.reshape(exp_H, [self.B, self.n_policies]),
                    'potential_actions': next_actions}
         return decision, selected_action, selected_action_mean, selected_exp_obs, records
-
-
-class REINFORCEPlanner(Planner):
-    def __init__(self, FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition, is_pre_phase):
-        self.n_policies = 1
-        self.num_glimpses = FLAGS.num_glimpses
-        self._is_pre_phase = is_pre_phase
-        # SEEMS TO LEARN TO CHEAT IF DOING THIS
-        # if use_true_labels:
-        #     self.policy_dep_input = tf.one_hot(y_MC, depth=FLAGS.num_classes)[tf.newaxis, :, :]  # first dimension is n_policies
-        # else:
-        #     self.policy_dep_input = None
-
-        super().__init__(FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition)
-
-    def planning_step(self, current_state, z_samples, time, is_training):
-        # TODO: CHECK EFFECT ON PERFORMANCE FROM INCLUDING THIS OR NOT (WHETHER INCLUDING IT MAKES THE MODEL FOCUS LESS ON LEARNING RECONSTRUCTIONS)
-        if self._is_pre_phase:
-            # TODO: ADJUST FOR UK CLASSES
-            policy_dep_input = tf.one_hot(tf.argmax(current_state['c'], axis=1),
-                                          depth=self.num_classes_kn)[tf.newaxis, :, :]
-        else:
-            policy_dep_input = None
-
-        next_action, next_action_mean = self.m['policyNet'].next_actions(time=time,
-                                                                         inputs=[current_state['c'], current_state['s']],
-                                                                         is_training=is_training,
-                                                                         n_policies=self.n_policies,
-                                                                         policy_dep_input=policy_dep_input)
-        next_exp_obs = self.single_policy_prediction(current_state, z_samples, next_action)
-
-        if time < (self.num_glimpses - 1):
-            decision = tf.fill([self.B], -1)
-        else:
-            decision = self._best_believe(current_state)
-
-        return decision, next_action, next_action_mean, next_exp_obs, self.zero_records

@@ -71,7 +71,7 @@ class Utility(object):
         if FLAGS.use_conv:
             experiment_name += '_CNN'
         if FLAGS.uk_folds:
-            experiment_name += '_uk{}_{}'.format(FLAGS.num_uk_train, FLAGS.num_uk_test)
+            experiment_name += '_ukTr{}Te{}U{}Cy{}'.format(FLAGS.num_uk_train, FLAGS.num_uk_test, FLAGS.num_uk_test_used, FLAGS.uk_cycling)
         if FLAGS.binarize_MNIST:
             experiment_name += '_binar'
 

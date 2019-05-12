@@ -4,7 +4,7 @@ from tensorflow import distributions as tfd
 from models import base
 from tools.tf_tools import write_zero_out, repeat_axis, calculate_gaussian_nll
 from modules.policyNetwork import PolicyNetwork
-from modules.VAE import Encoder, Decoder, GlimpseEncoder
+from modules.VAE_OLD import Encoder, Decoder, GlimpseEncoder
 from modules.planner import ActInfPlanner, REINFORCEPlanner
 from modules.stateTransition import StateTransition_AC
 

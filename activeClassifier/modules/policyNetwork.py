@@ -36,9 +36,8 @@ class PolicyNetwork:
                     specific_inputs += [policy_dep_input[k]]
                 specific_inputs = tf.stop_gradient(tf.concat(specific_inputs, axis=1))
                 loc_mean.append(self.calc_encoding(specific_inputs))
-            loc_mean = tf.stack(loc_mean, axis=1)
+            loc_mean = tf.stack(loc_mean, axis=1)  # [B, n_policies, loc_dims]
 
-            loc_mean = tf.reshape(loc_mean, [self.batch_sz * n_policies, self.loc_dim])  # [batch_sz * n_policies, FLAGS.loc_dims]
             loc_mean = tf.clip_by_value(loc_mean, self.max_loc_rng * -1, self.max_loc_rng * 1)
 
             with tf.name_scope('sample_locs'):
@@ -47,10 +46,11 @@ class PolicyNetwork:
                               lambda: tf.identity(loc_mean),
                               name='sample_loc_cond')
 
-        if n_policies > 1:
-            return tf.reshape(loc, [self.batch_sz, n_policies, self.loc_dim]), tf.reshape(loc_mean, [self.batch_sz, n_policies, self.loc_dim])
-        else:
-            return loc, loc_mean
+        if n_policies == 1:
+            loc = tf.squeeze(loc, 1)
+            loc_mean = tf.squeeze(loc_mean, 1)
+
+        return loc, loc_mean  # [B, n_policies, loc_dims] or # [B, loc_dims]
 
     def REINFORCE_losses(self, returns, baselines, locs, loc_means):
         with tf.name_scope('loc_losses'):

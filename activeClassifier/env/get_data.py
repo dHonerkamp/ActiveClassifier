@@ -228,10 +228,10 @@ def get_data(FLAGS):
     assert ((FLAGS.num_classes == num_classes_train)  # no uks
             or (FLAGS.num_classes == num_classes_train + 1 and FLAGS.num_uk_train == 0 and not FLAGS.uk_train_labels)  # no train uks
             or (FLAGS.num_classes == num_classes_train + 1 and FLAGS.uk_cycling))
-    if FLAGS.uk_label and not FLAGS.uk_cycling and (FLAGS.num_uk_train or FLAGS.uk_train_labels):
-        assert FLAGS.num_classes_kn == num_classes_train - 1
+    if FLAGS.uk_label and not FLAGS.uk_cycling and (FLAGS.num_uk_train or FLAGS.uk_train_labels or (FLAGS.dataset == 'MNIST_OMNI_notMNIST')):
+        assert FLAGS.num_classes_kn == num_classes_train - 1, 'kn: {}, train: {}'.format(FLAGS.num_classes_kn, num_classes_train)
     else:
-        assert FLAGS.num_classes_kn == num_classes_train
+        assert FLAGS.num_classes_kn == num_classes_train, 'kn: {}, train: {}'.format(FLAGS.num_classes_kn, num_classes_train)
 
     FLAGS.train_batches_per_epoch = np.ceil(train[0].shape[0] / FLAGS.batch_size).astype(int)
     FLAGS.batches_per_eval_valid  = np.ceil(valid[0].shape[0] / FLAGS.batch_size).astype(int)

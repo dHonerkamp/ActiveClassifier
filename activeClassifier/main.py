@@ -1,5 +1,7 @@
+import os.path
 import logging
 import time
+import pickle
 import tensorflow as tf
 from sklearn.metrics import f1_score
 
@@ -123,6 +125,10 @@ def main():
     cp_path = FLAGS.path + "/cp.ckpt"
     initial_phase = True
 
+    # store FLAGS for later aggregation of metrics
+    with open(os.path.join(FLAGS.path, 'flags.pkl'), 'wb') as f:
+        pickle.dump(vars(FLAGS), f)
+
     for phase in phases:
         if phase['num_epochs'] == 0:
             continue
@@ -149,6 +155,10 @@ def main():
             else:
                 old_vars = [v[0] for v in tf.train.list_variables(cp_path)]
                 variables_can_be_restored = [v for v in tf.global_variables() if v.name.split(':')[0] in old_vars]
+                # [print(v) for v in variables_can_be_restored]
+                # print('Unrestored:')
+                # [print(v) for v in tf.global_variables() if v.name.split(':')[0] not in old_vars]
+
                 # print(variables_can_be_restored)
                 tf.train.Saver(variables_can_be_restored).restore(sess, cp_path)
 

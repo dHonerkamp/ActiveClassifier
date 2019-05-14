@@ -1,0 +1,9 @@
+datetime
+argparse
+logging
+math
+numpy
+pandas
+matplotlib
+sklearn
+tensorflow==1.8

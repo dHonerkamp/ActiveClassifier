@@ -126,7 +126,7 @@ def main():
     initial_phase = True
 
     # store FLAGS for later aggregation of metrics
-    with open(os.path.join(FLAGS.path, 'flags.pkl'), 'wb') as f:
+    with open(os.path.join(FLAGS.path, 'log_flags.pkl'), 'wb') as f:
         pickle.dump(vars(FLAGS), f)
 
     for phase in phases:

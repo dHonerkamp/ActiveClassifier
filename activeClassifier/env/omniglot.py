@@ -112,8 +112,9 @@ def get_OMNIGLOT(FLAGS, data_path):
 
 def get_omni_small(FLAGS, data_path):
     resize = 28
-    if os.path.exists(data_path + '/omni{}.npy'.format(resize)):
-        omni_img = np.load(data_path + '/omni{}.npy'.format(resize))
+    if os.path.exists(os.path.join(data_path, 'omni{}_lbls.npy'.format(resize))):
+        omni_img = np.load(os.path.join(data_path, 'omni{}.npy'.format(resize)))
+        omni_lbls = np.load(os.path.join(data_path, 'omni{}_lbls.npy'.format(resize)))
     else:
         omni_path = os.path.join(FLAGS.data_dir + "omniglot/", "images_all")
         alphabets = np.array(sorted(os.listdir(omni_path)))
@@ -122,14 +123,25 @@ def get_omni_small(FLAGS, data_path):
                                for alpha in alphabets
                                for character in os.listdir(os.path.join(omni_path, alpha))
                                for name in os.listdir(os.path.join(omni_path, alpha, character))])
+
+        omni_lbls = ['_'.join(os.path.normpath(f).split(os.sep)[-3:-1]) for f in omni_paths]
+        omni_lbl_dict = dict(zip(np.unique(omni_lbls), range(len(np.unique(omni_lbls)))))
+        omni_lbls = np.array(list(map(omni_lbl_dict.get, omni_lbls)))
+
         omni_img = np.array([misc.imresize(misc.imread(p, flatten=True), size=(resize, resize),
                                            interp='nearest') for p in omni_paths], dtype=np.float32)
         omni_img = omni_img / 255.
         omni_img = np.expand_dims(omni_img, -1)
         omni_img = np.abs(omni_img - 1.)  # change the digit to be 1 and the background 0
-        omni_img = np.random.permutation(omni_img)
+
+        def shuffle(x, y):
+            idx = np.random.permutation(x.shape[0])
+            return x[idx], y[idx]
+        omni_img, omni_lbls = shuffle(omni_img, omni_lbls)
+
         if not os.path.exists(data_path):
             os.mkdir(data_path)
-        np.save(data_path + '/omni{}'.format(resize), omni_img)
+        np.save(os.path.join(data_path, 'omni{}'.format(resize)), omni_img)
+        np.save(os.path.join(data_path, 'omni{}_lbls'.format(resize)), omni_lbls)
 
-    return omni_img
+    return omni_img, omni_lbls

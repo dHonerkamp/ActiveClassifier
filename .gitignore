@@ -16,5 +16,4 @@ activeClassifier/data/
 *.synctex.gz
 
 # Files
-activeClassifier/metrics_overview.ipynb
 activeClassifier/tools/gumbel_softmax.py

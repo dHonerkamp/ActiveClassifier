@@ -191,17 +191,19 @@ def get_data(FLAGS):
         # add resized OMNIGLOT as unknowns to train and validation set
         def get_uk_y(length):
             return np.full([length], FLAGS.uk_label, dtype=np.int32)
-        omni_img = get_omni_small(FLAGS, data_path)
+        omni_img, omni_lbls = get_omni_small(FLAGS, data_path)
         train = (np.concatenate([train[0], omni_img[:len_tr]], axis=0),
                  np.concatenate([train[1], get_uk_y(len_tr)], axis=0))
         valid = (np.concatenate([valid[0], omni_img[len_tr:len_tr + len_valid]], axis=0),
                  np.concatenate([valid[1], get_uk_y(len_valid)], axis=0))
+        FLAGS.num_uk_train = len(np.unique(omni_lbls[len_tr:len_tr + len_valid]))
 
         # add notMNIST as unknowns to test set
         notmnist = notMNIST(FLAGS.data_dir, test_only=True)
-        notMNIST_x, _ = notmnist.test
+        notMNIST_x, notMNIST_y = notmnist.test
         test = (np.concatenate([test[0], notMNIST_x[:len_test]], axis=0),
                 np.concatenate([test[1], get_uk_y(len_test)], axis=0))
+        FLAGS.num_uk_test = len(np.unique(notMNIST_y[:len_test]))
 
         # assure FLAGS.uk_pct is not set so high that we don't have enough unknown observations
         assert (len_tr + len_valid) <= omni_img.shape[0]

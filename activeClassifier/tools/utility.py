@@ -65,15 +65,18 @@ class Utility(object):
     def set_exp_name(FLAGS):
         experiment_name  = '{}gl_{}_{}_bs{}_MC{}_'.format(FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples)
         experiment_name += 'lr{}dc{}_'.format(FLAGS.learning_rate, FLAGS.learning_rate_decay_factor)
-        experiment_name += '{}sc{}_lstd{}_glstd{}_'.format(len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.loc_std, FLAGS.gl_std)
+        experiment_name += '{}sc{}_lstd{}min{}initRng{}_glstd{}_'.format(len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.loc_std, FLAGS.loc_std_min, FLAGS.init_loc_rng, FLAGS.gl_std)
         experiment_name += 'preTr{}{}uk{}_'.format(FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk) if FLAGS.pre_train_epochs else ''
-        experiment_name += 'z{sz}{d}{kl}C{c}_fbN{n}'.format(sz=FLAGS.size_z, d=FLAGS.z_dist, kl=FLAGS.z_B_kl, c=FLAGS.z_B_center, n=FLAGS.normalise_fb)
+        experiment_name += 'z{sz}{d}{kl}C{c}w{w}_fbN{n}'.format(sz=FLAGS.size_z, d=FLAGS.z_dist, kl=FLAGS.z_B_kl, c=FLAGS.z_B_center, w=FLAGS.z_kl_weight, n=FLAGS.normalise_fb)
         if FLAGS.use_conv:
             experiment_name += '_CNN'
+        if FLAGS.planner == 'ActInf':
+            experiment_name += '_c{}a{}p{}'.format(FLAGS.prior_preference_c, FLAGS.precision_alpha, FLAGS.prior_preference_glimpses)
         if FLAGS.uk_folds:
             experiment_name += '_ukTr{}Te{}U{}Cy{}'.format(FLAGS.num_uk_train, FLAGS.num_uk_test, FLAGS.num_uk_test_used, FLAGS.uk_cycling)
         if FLAGS.binarize_MNIST:
             experiment_name += '_binar'
+
 
         if platform != 'win32':
             if FLAGS.freeze_enc:
@@ -128,6 +131,8 @@ class Utility(object):
         # locations
         parser.add_argument('--max_loc_rng', type=float, default=1., help='In what range are the locations allowed to fall? (Max. is -1 to 1)')
         parser.add_argument('--loc_std', type=float, default=0.09, help='Std used to sample locations. Relative to whole image being in range (-1, 1).')
+        parser.add_argument('--loc_std_min', type=float, default=0.09, help='Minimum loc_std, decaying exponentially (hardcoded decay rate).')
+        parser.add_argument('--init_loc_rng', type=float, default=1., help='Range from which the initial, random location will be sampled. Value between [0, 1].')
         # parser.add_argument('--loc_encoding', type=str, default='cartFiLM', choices=["cartOrig", "cartFiLM", "cartRel", "polarRel"],
         #     help='cartOrig: (x, y), glNet: additive'
         #          'cartFiLM: (x, y), glNet: learning gamma, beta'
@@ -138,9 +143,12 @@ class Utility(object):
         parser.add_argument('--beliefUpdate', type=str, default='fb', choices=['fb', 'fc', 'RAM'], help='Belief update strategy.')
         parser.add_argument('--normalise_fb', type=int, default=0, choices=[0, 1, 2], help='Use min_normalisation for prediction fb or not. 1: divide by baseline, 1: subtract baseline')
         parser.add_argument('--prior_preference_c', type=int, default=2, help='Strength of preferences for correct / wrong classification.')
+        parser.add_argument('--prior_preference_glimpses', type=int, default=-4, help='Penalty for taking more than 4 glimpses (Visual foraging: -2*c).')
+        parser.add_argument('--precision_alpha', type=int, default=1, help='Precision constant. Visual foraging_demo: 512')
         parser.add_argument('--size_z', type=int, default=32, help='Dimensionality of the hidden states z.')
         parser.add_argument('--z_dist', type=str, default='B', choices=['N', 'B'], help='Distributions of the hidden state. N: normal, B: bernoulli.')
         parser.add_argument('--z_B_kl', type=int, default=22, choices=[20, 21, 22], help='Bernoulli latent code only: type of KL divergence. Corresponds to equations in https://arxiv.org/abs/1611.00712.')
+        parser.add_argument('--z_kl_weight', type=float, default=1., help='Weighting the kl term up or down.')
         parser.add_argument('--z_B_center', type=int, default=0, choices=[0, 1], help='Bernoulli latent code only: center the logits.')
         parser.add_argument('--num_hidden_fc', type=int, default=512, help='Standard size of fully connected layers.')
         parser.add_argument('--use_conv', type=int, default=0, choices=[0, 1], help='Whether to use a convolutional encoder/decoder instead of fc.')

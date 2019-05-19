@@ -48,7 +48,7 @@ class predRSSM(base.Base):
         if planner == 'ActInf':
             planner = ActInfPlanner(FLAGS, submodules, self.B, env.patch_shape_flat, stateTransition, self.C)
         elif planner == 'RL':
-            planner = REINFORCEPlanner(FLAGS, submodules, self.B, env.patch_shape_flat, stateTransition, is_pre_phase=(FLAGS.planner!='RL'))
+            planner = REINFORCEPlanner(FLAGS, submodules, self.B, env.patch_shape_flat, stateTransition, is_pre_phase=(FLAGS.planner!='RL'), labels=self.y_MC)
         else:
             raise ValueError('Undefined planner.')
 
@@ -102,7 +102,6 @@ class predRSSM(base.Base):
                     current_state, next_decision, next_action, next_action_mean, next_exp_obs, pl_records = planner.initial_planning()
                     ta_d['current_c'] = write_zero_out(0, ta_d['current_c'], current_state['c'], last_done)
                 else:
-                    # TODO: ADJUST next_exp_obs OUTPUT FOR BOTH RANDOM_LOC AND PLANNING!!
                     if policy == 'random':
                         next_decision, next_action, next_action_mean, pl_records = planner.random_policy()
                         next_exp_obs = planner.single_policy_prediction(last_state, last_z, next_action)
@@ -112,7 +111,6 @@ class predRSSM(base.Base):
                     # TODO : Could REUSE FROM PLANNING STEP
                     current_state = stateTransition([last_z, next_action], last_state)
 
-                # baseline = fc_baseline(tf.stop_gradient(tf.concat([current_c, tf.fill([self.B, 1], tf.cast(time, tf.float32))], axis=1)))
                 bl_inputs = tf.concat([current_state['c'], current_state['s']], axis=1)
                 baseline = tf.squeeze(fc_baseline(tf.stop_gradient(bl_inputs)), 1)
 
@@ -246,6 +244,10 @@ class predRSSM(base.Base):
             loss_exclPolicy = beliefUpdate_loss + bl_surpise_mse + nll_post + KLdiv
             self.train_op_freezeEncoder, _, _ = self._create_train_op(FLAGS, self.loss, self.global_step, varlist=drop_vars(all_vars, excl_enc), name='train_op_freezeEncoder')
             self.train_op_freezePolNet, _, _  = self._create_train_op(FLAGS, loss_exclPolicy, self.global_step, varlist=drop_vars(all_vars, excl_policyNet), name='train_op_freezePolNet')
+
+        with tf.name_scope('Monitoring'):
+            tf.summary.scalar('lr', self.learning_rate)
+            tf.summary.scalar('loc_std', policyNet.std)
 
         with tf.name_scope('Summaries'):
             metrics_upd_coll = "streaming_updates"

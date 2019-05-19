@@ -17,6 +17,7 @@ class BeliefUpdate:
         self.num_classes_kn = FLAGS.num_classes_kn
         self.z_dist = FLAGS.z_dist
         self.z_B_kl = FLAGS.z_B_kl
+        self.z_kl_weight = FLAGS.z_kl_weight
 
         self.uk_cycling = FLAGS.uk_cycling
         if self.uk_cycling:
@@ -102,7 +103,7 @@ class BeliefUpdate:
         else:
             raise ValueError('Unknown z_dist: {}'.format(self.z_dist))
 
-        KLdiv = tf.reduce_sum(KLdiv, axis=2)
+        KLdiv = self.z_kl_weight * tf.reduce_sum(KLdiv, axis=2)
 
         if self.uk_cycling:
             # mask the prediction error of the current uk classes with the highest prediction error of the observation

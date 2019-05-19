@@ -6,7 +6,7 @@ from tools.tf_tools import TINY
 
 class Base:
     def __init__(self, FLAGS, env, phase):
-        self.global_step = tf.Variable(0, trainable=False, name='global_step')
+        self.global_step = tf.train.create_global_step()
         self.global_epoch = self.global_step // FLAGS.train_batches_per_epoch
         self.total_steps = FLAGS.num_epochs * FLAGS.train_batches_per_epoch
         self.epoch_num = self.global_step // FLAGS.train_batches_per_epoch
@@ -16,9 +16,8 @@ class Base:
 
         with tf.name_scope('Learning_rate'):
             self.learning_rate = tf.train.exponential_decay(FLAGS.learning_rate, self.global_step,
-                                                            FLAGS.train_batches_per_epoch,
-                                                            FLAGS.learning_rate_decay_factor,
-                                                            staircase=False)
+                                                            decay_steps=FLAGS.train_batches_per_epoch,
+                                                            decay_rate=FLAGS.learning_rate_decay_factor)
             self.learning_rate = tf.maximum(self.learning_rate, FLAGS.min_learning_rate)
 
         # train phases
@@ -33,11 +32,11 @@ class Base:
 
         # prior preferences
         prior_preferences_glimpse = np.full([FLAGS.num_glimpses, 1], 0., dtype=np.float32)
-        prior_preferences_glimpse[4:] = -2. * FLAGS.prior_preference_c  # discourage taking more glimpses than neccessary
+        prior_preferences_glimpse[4:] = FLAGS.prior_preference_glimpses  # discourage taking more glimpses than neccessary. Visual foraging: -2 * FLAGS.prior_preference_c
         prior_preferences_classification = np.tile(np.array([FLAGS.prior_preference_c, -2. * FLAGS.prior_preference_c], ndmin=2, dtype=np.float32),
                                                    [FLAGS.num_glimpses, 1])
         prior_preferences = np.concatenate(([prior_preferences_glimpse, prior_preferences_classification]), axis=1)
-        self.C = tf.log(tf.nn.softmax(prior_preferences) + TINY)  # [T, [prediction error, correct classification, wrong classification]]
+        self.C = tf.nn.log_softmax(prior_preferences)  # [T, [prediction error, correct classification, wrong classification]]
 
 
     def _create_train_op(self, FLAGS, loss, global_step, name, varlist=None):

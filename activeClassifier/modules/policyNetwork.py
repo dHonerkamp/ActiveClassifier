@@ -4,11 +4,16 @@ import tensorflow as tf
 class PolicyNetwork:
     def __init__(self, FLAGS, batch_sz, n_policies, name='LocationNetwork'):
         self.name = name
-        self.std = FLAGS.loc_std
         self.max_loc_rng = FLAGS.max_loc_rng
+        self.init_loc_rng = FLAGS.init_loc_rng
         self.batch_sz = batch_sz
         self.loc_dim = FLAGS.loc_dim
         self._units = FLAGS.num_hidden_fc
+
+        self.std = tf.train.exponential_decay(FLAGS.loc_std, tf.train.get_global_step(),
+                                              decay_steps=FLAGS.train_batches_per_epoch,
+                                              decay_rate=0.9)
+        self.std = tf.maximum(self.std, FLAGS.loc_std_min)
 
         self.calc_encoding = tf.make_template(self.name, self._input_encoding)
 
@@ -16,7 +21,7 @@ class PolicyNetwork:
         hidden = tf.layers.dense(inputs, self._units, activation=tf.nn.relu)
         return tf.layers.dense(hidden, self.loc_dim, activation=tf.nn.tanh)
 
-    def next_actions(self, time, inputs, is_training, n_policies, policy_dep_input=None):
+    def next_actions(self, inputs, is_training, n_policies, policy_dep_input=None):
         """
         NOTE: Does not propagate back into the inputs. Gradients for the policyNet weights only flow through the loc_mean (which should only be used in the REINFORCE_loss calculations)
         NOTE: tf backpropagates through sampling if using tf.distributions.Normal()"""
@@ -24,11 +29,6 @@ class PolicyNetwork:
             assert policy_dep_input is not None
 
         with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
-            if inputs is None:
-                inputs = []
-            if time is not None:
-                inputs.append(tf.fill([self.batch_sz, 1], tf.cast(time, tf.float32)))
-
             loc_mean = []
             for k in range(n_policies):
                 specific_inputs = inputs.copy()
@@ -75,4 +75,4 @@ class PolicyNetwork:
         return loc, loc
 
     def inital_loc(self):
-        return self.random_loc()
+        return self.random_loc(rng=self.init_loc_rng)

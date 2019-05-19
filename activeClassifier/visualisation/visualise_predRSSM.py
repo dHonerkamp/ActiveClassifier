@@ -63,6 +63,9 @@ class Visualization_predRSSM(Base):
         if self.visualisation_level > 0:
             d = self._eval_feed(sess, feed)
 
+            nr_obs_overview = min(nr_obs_overview, self.batch_size_eff)  # batch_size_eff is set in _eval_feed() -> has to come before
+            nr_obs_reconstr = min(nr_obs_reconstr, self.batch_size_eff)
+
             self.prefix = 's{}_e{}_ph{}'.format(d['step'], d['epoch'], d['phase'])
             self.plot_overview(d, nr_obs_overview, suffix)
 
@@ -195,6 +198,9 @@ class Visualization_predRSSM(Base):
                                                            edgecolor=color, facecolor='none', linewidth=1.5, label=lbl))
                         if correct:
                             axes[t, i].scatter(locs[1], locs[0], marker='x', facecolors=color, linewidth=1.5, s=0.25 * (5 * 8 * 24))
+                    # add current believes to legend
+                    axes[t, i].scatter(0, 0, marker='x', facecolors='k', linewidth=0, s=0, label='hyp: ' + ', '.join('{:.2f}'.format(i) for i in d['state_believes'][t, i, :5]))
+                    axes[t, i].scatter(0, 0, marker='o', facecolors='k', linewidth=0, s=0, label='hyp: ' + ', '.join('{:.2f}'.format(i) for i in d['state_believes'][t, i, 5:]))
 
                     chartBox = axes[t, i].get_position()
                     axes[t, i].set_position([chartBox.x0, chartBox.y0, chartBox.width * 0.6, chartBox.height])

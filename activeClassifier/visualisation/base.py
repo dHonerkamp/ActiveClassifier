@@ -121,6 +121,24 @@ class Base:
         x = np.reshape(x, list(x.shape[:-3]) + [sc0, self.num_scales * sc0])
         return x
 
+    def _plot_seen(self, x, locs, until_t, ax):
+        img = x.reshape(self.img_shape_squeezed)
+        ix, iy = np.meshgrid(np.arange(self.img_shape[0]), np.arange(self.img_shape[1]))
+
+        seen = np.zeros_like(img, dtype=np.bool)
+        for tt in range(until_t):
+            loc = locs[tt, :]
+            y_boundry = [loc[0] - self.scale_sizes[0] / 2, loc[0] + self.scale_sizes[0] / 2]
+            x_boundry = [loc[1] - self.scale_sizes[0] / 2, loc[1] + self.scale_sizes[0] / 2]
+
+            new = (ix >= x_boundry[0]) & (ix <= x_boundry[1]) & (iy >= y_boundry[0]) & (iy <= y_boundry[1])
+            seen[new] = True
+
+        cmap = matplotlib.cm.gray
+        cmap.set_bad(color='white')
+        img_seen = np.ma.masked_where(~seen, img)
+        ax.imshow(img_seen, cmap=cmap)
+
     def _save_fig(self, f, folder_name, name):
         f.tight_layout()
         f.savefig(os.path.join(self.path, folder_name, name), bbox_inches='tight')

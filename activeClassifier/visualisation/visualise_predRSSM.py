@@ -49,6 +49,7 @@ class Visualization_predRSSM(Base):
 
                 if (self.planner == 'ActInf'):
                     folders.append('planning')
+                    folders.append('planning_patches')
             #
             #         self.fetch.update({'exp_exp_obs' : model.exp_exp_obs,
             #                            'exp_obs': model.exp_obs,
@@ -75,7 +76,8 @@ class Visualization_predRSSM(Base):
 
             #     self.plot_fb(d, prefix)
                 if (self.planner == 'ActInf') & (d['epoch'] >= self.pre_train_epochs):
-                    self.plot_planning(d, nr_examples=nr_obs_reconstr)  # one plot for each policy
+                    self.plot_planning(d, nr_examples=nr_obs_reconstr)
+                    self.plot_planning_patches(d, nr_examples=nr_obs_reconstr)
 
     def plot_reconstr(self, d, nr_examples, suffix='', folder_name='reconstr'):
         if self.visualisation_level < 1:
@@ -173,12 +175,6 @@ class Visualization_predRSSM(Base):
                 if t == 0:  # random action
                     self._plot_img_plus_locs(axes[0, i], d['x'][i], d['y'][i], d['clf'][i], d['locs'][:, i, :], d['decisions'][:, i])
                     axes[t, i].set_title('t: {}, random policy, lbl: {}, clf: {}'.format(t, d['y'][i], d['clf'][i]))
-                    # locs = d['locs'][t, i]
-                    # axes[t, i].set_title('t: {}, random policy'.format(t))
-                    # axes[t, i].add_patch(Rectangle(locs[::-1] - self.scale_sizes[0] / 2,
-                    #                                    width=self.scale_sizes[0], height=self.scale_sizes[0],
-                    #                                    edgecolor='g', facecolor='none', linewidth=1.5))
-                    # axes[t, i].scatter(locs[1], locs[0], marker='x', facecolors='g', linewidth=1.5, s=0.25 * (5 * 8 * 24))
                 else:
                     if np.sum(d['H_exp_exp_obs'][t, i, :]) == 0.:
                         axes[t, i].set_title('t: {}, decision - no glimpse'.format(t))
@@ -199,14 +195,63 @@ class Visualization_predRSSM(Base):
                         if correct:
                             axes[t, i].scatter(locs[1], locs[0], marker='x', facecolors=color, linewidth=1.5, s=0.25 * (5 * 8 * 24))
                     # add current believes to legend
-                    axes[t, i].scatter(0, 0, marker='x', facecolors='k', linewidth=0, s=0, label='hyp: ' + ', '.join('{:.2f}'.format(i) for i in d['state_believes'][t, i, :5]))
-                    axes[t, i].scatter(0, 0, marker='o', facecolors='k', linewidth=0, s=0, label='hyp: ' + ', '.join('{:.2f}'.format(i) for i in d['state_believes'][t, i, 5:]))
+                    ranked_believes = np.argsort(- d['state_believes'][t, i, :])
+                    lbl = 'hyp: ' + ', '.join('{} ({:.2f})'.format(j,  d['state_believes'][t, i, j]) for j in ranked_believes[:5])
+                    axes[t, i].scatter(0, 0, marker='x', facecolors='k', linewidth=0, s=0, label=lbl)
 
                     chartBox = axes[t, i].get_position()
                     axes[t, i].set_position([chartBox.x0, chartBox.y0, chartBox.width * 0.6, chartBox.height])
                     axes[t, i].legend(loc='center left', bbox_to_anchor=(1.04, 0.5), borderaxespad=0)
 
         [ax.set_axis_off() for ax in axes.ravel()]
+        self._save_fig(f, folder_name, '{}{}.png'.format(self.prefix, suffix))
+
+    def plot_planning_patches(self, d, nr_examples, suffix='', folder_name='planning_patches'):
+        # T x [True glimpse, exp_exp_obs, exp_obs...]
+        nax_x = nr_examples
+        nax_y = self.num_glimpses
+
+        f, axes = plt.subplots(nax_y, nax_x, figsize=(8 * self.num_scales * nax_x, 4 * nax_y), squeeze=False)
+        for i in range(nr_examples):
+            # Note: first action is random, meaning d['potential_actions'][0] will be zero
+            for t in range(self.num_glimpses):
+                if t == 0:  # random action
+                    self._plot_img_plus_locs(axes[0, i], d['x'][i], d['y'][i], d['clf'][i], d['locs'][:, i, :], d['decisions'][:, i])
+                    axes[t, i].set_title('t: {}, random policy, lbl: {}, clf: {}'.format(t, d['y'][i], d['clf'][i]))
+                else:
+                    if np.sum(d['H_exp_exp_obs'][t, i, :]) == 0.:
+                        axes[t, i].set_title('t: {}, decision - no glimpse'.format(t))
+                        continue
+
+                    # plot patches seen until now
+                    self._plot_seen(d['x'][i], d['locs'][:, i], until_t=t, ax=axes[t, i])
+                    axes[t, i].set_title('t: {}, selected policy: {}'.format(t, np.argmax(d['G'][t, i, :])))
+
+                    # plot rectangles for evaluated next locations
+                    for k in range(self.num_policies):
+                        # potential location under evaluation
+                        locs = d['potential_actions'][t, i, k]
+                        color = 'C{}'.format(k)
+                        correct = np.all((locs == d['locs'][t, i, :]))
+
+                        lbl = '{}: G: {:.2f}, H_: {:.2f}, exp_H: {:.2f}, G_dec: {:.2f}'.format(k, d['G'][t, i, k], d['H_exp_exp_obs'][t, i, k], d['exp_H'][t, i, k], d['G'][t, i, -1])
+                        axes[t, i].add_patch(Rectangle(locs[::-1] - self.scale_sizes[0] / 2,
+                                                           width=self.scale_sizes[0], height=self.scale_sizes[0],
+                                                           edgecolor=color, facecolor='none', linewidth=1.5, label=lbl))
+                        if correct:
+                            axes[t, i].scatter(locs[1], locs[0], marker='x', facecolors=color, linewidth=1.5, s=0.25 * (5 * 8 * 24))
+                    # add current believes to legend
+                    ranked_believes = np.argsort(- d['state_believes'][t, i, :])
+                    lbl = 'hyp: ' + ', '.join('{} ({:.2f})'.format(j,  d['state_believes'][t, i, j]) for j in ranked_believes[:5])
+                    axes[t, i].scatter(0, 0, marker='x', facecolors='k', linewidth=0, s=0, label=lbl)
+
+                    chartBox = axes[t, i].get_position()
+                    axes[t, i].set_position([chartBox.x0, chartBox.y0, chartBox.width * 0.6, chartBox.height])
+                    axes[t, i].legend(loc='center left', bbox_to_anchor=(1.04, 0.5), borderaxespad=0)
+
+        [ax.set_xticks([])  for ax in axes.ravel()]
+        [ax.set_yticks([])  for ax in axes.ravel()]
+        [ax.set_axis_off() for ax in axes[-1, :].ravel()]
         self._save_fig(f, folder_name, '{}{}.png'.format(self.prefix, suffix))
 
     def plot_fb(self, d, suffix=''):

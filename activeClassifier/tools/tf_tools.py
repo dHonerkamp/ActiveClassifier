@@ -24,17 +24,28 @@ def create_MLP(specs, name_prefix=''):
     return layers
 
 
+def binary_entropy(logits=None, probs=None, return_nats=True):
+    if (probs is None) == (logits is None):
+        raise ValueError("Must pass probs or logits, but not both.")
+
+    if logits is not None:
+        H = tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.nn.sigmoid(logits), logits=logits)
+    else:
+        probs = tf.stack([probs, 1. - probs], axis=-1)
+        H = entropy(probs=probs)
+
+    if return_nats:# change of basis into nats
+        H /= tf.log(2.)
+    return H
+
+
 def entropy(probs=None, logits=None, axis=-1):
-  """Compute entropy over specified dimensions."""
+  """Compute entropy over specified dimensions (i.e. assumes one-hot encoded vector)."""
   if (probs is None) == (logits is None):
       raise ValueError("Must pass probs or logits, but not both.")
 
   if logits is not None:
-      if axis is None:
-          plogp = tf.nn.sigmoid(logits) * tf.log(tf.nn.sigmoid(logits) + TINY)
-          axis = -1
-      else:
-          plogp = tf.nn.softmax(logits, axis) * tf.nn.log_softmax(logits, axis)
+      plogp = tf.nn.softmax(logits, axis) * tf.nn.log_softmax(logits, axis)
   else:
       plogp = probs * tf.log(probs + TINY)
   return -tf.reduce_sum(plogp, axis)

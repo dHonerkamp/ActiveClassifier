@@ -1,6 +1,7 @@
+import numpy as np
 import tensorflow as tf
 
-from tools.tf_tools import binary_entropy
+from tools.tf_tools import binary_entropy, repeat_axis
 
 
 class EntropyTest(tf.test.TestCase):
@@ -20,6 +21,16 @@ class EntropyTest(tf.test.TestCase):
             self.assertAllEqual(H1.eval(), [1., 1.])
             self.assertAllEqual(H0.eval(), [0., 0.])
 
+
+class RepeatsTest(tf.test.TestCase):
+    def test_repeat_axis(self):
+        x = np.random.rand(10, 10)
+
+        x1 = np.repeat(x, repeats=3, axis=1)
+        x2 = repeat_axis(tf.constant(x), axis=1, repeats=5)
+
+        with self.test_session():
+            self.assertAllEqual(x1, x2.eval())
 
 if __name__ == '__main__':
     tf.test.main()

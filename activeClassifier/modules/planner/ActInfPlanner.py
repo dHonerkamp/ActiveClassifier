@@ -23,18 +23,10 @@ class ActInfPlanner(Base):
         self.policy_dep_input =  tf.tile(tf.one_hot(tf.range(FLAGS.num_classes_kn), depth=FLAGS.num_classes_kn)[:, tf.newaxis, :],
                                          [1, batch_sz, 1])  # [hyp, B, num_classes]
 
-    def _flatten_obs(self, obs):
-        return tf.reshape(obs, [self.B * self.n_policies * self.num_classes_kn, self.m['VAEEncoder'].output_size])
-
-    @staticmethod
-    def _hyp_tiling(n_classes, n_tiles):
-        one_hot = tf.one_hot(tf.range(n_classes), depth=n_classes)  # [n_classes, n_classes]
-        return tf.tile(one_hot, [n_tiles, 1])  # [n_tiles * n_classes, n_classes]
-
     @staticmethod
     def _binary_entropy_agg(logits):
-        H = binary_entropy(logits=logits)  # [B * n_policies * hyp, z]
         # TODO: DOES MEAN MAKE SENSE? (at least better than sum, as indifferent to size_z)
+        H = binary_entropy(logits=logits)  # [B * n_policies * hyp, z]
         return tf.reduce_mean(H, axis=-1)  # [B * n_policies * hyp]
 
     def _exp_H(self, exp_obs_mu, exp_obs_sigma, c_believes):
@@ -67,6 +59,13 @@ class ActInfPlanner(Base):
         return H_exp_exp_obs, exp_exp_obs
 
     def calc_G_obs_prePreferences(self, exp_obs, exp_obs_sigma, c_believes):
+        """
+        Args:
+            exp_obs_mu, exp_obs_sigma: [B, n_policies, hyp, glimpse]
+            c_believes: [B, hyp]
+        Returns:
+            G, exp_exp_obs, exp_H, H_exp_exp_obs: [B, n_policies]
+        """
         # expected entropy
         exp_H = self._exp_H(exp_obs, exp_obs_sigma, c_believes)
         # Entropy of the expectation

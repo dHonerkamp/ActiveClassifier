@@ -2,7 +2,7 @@ import warnings
 import tensorflow as tf
 
 from models import base
-from tools.tf_tools import write_zero_out
+from tools.tf_tools import write_zero_out, repeat_axis
 from modules.policyNetwork import PolicyNetwork
 from modules.VAE_predRSSM import Encoder, Decoder
 from modules.planner.ActInfPlanner import ActInfPlanner
@@ -54,11 +54,11 @@ class predRSSM(base.Base):
 
         self.n_policies = planner.n_policies
         if FLAGS.beliefUpdate == 'fb':
-            beliefUpdate = PredErrorUpdate(FLAGS, submodules, self.n_policies, self.B, labels=self.y_MC, current_cycl_uk=current_cycl_uk)
+            beliefUpdate = PredErrorUpdate(FLAGS, submodules, self.B, labels=self.y_MC, current_cycl_uk=current_cycl_uk)
         elif FLAGS.beliefUpdate == 'fc':
-            beliefUpdate = FullyConnectedUpdate(FLAGS, submodules, self.n_policies, self.B, labels=self.y_MC, current_cycl_uk=current_cycl_uk)
+            beliefUpdate = FullyConnectedUpdate(FLAGS, submodules, self.B, labels=self.y_MC, current_cycl_uk=current_cycl_uk)
         elif FLAGS.beliefUpdate == 'RAM':
-            beliefUpdate = RAMUpdate(FLAGS, submodules, self.n_policies, self.B, labels=self.y_MC, current_cycl_uk=current_cycl_uk)
+            beliefUpdate = RAMUpdate(FLAGS, submodules, self.B, labels=self.y_MC, current_cycl_uk=current_cycl_uk)
         else:
             raise ValueError('Undefined beliefUpdate.')
 
@@ -174,8 +174,8 @@ class predRSSM(base.Base):
 
             # further records for debugging
             selected_exp_obs = ta_d['selected_exp_obs'].stack()
-            self.exp_obs = ta_d['exp_obs'].stack()
-            self.exp_exp_obs = ta_d['exp_exp_obs'].stack()
+            self.exp_obs = ta_d['exp_obs'].stack()  # [T, B, n_policies, num_classes_kn, z]
+            self.exp_exp_obs = ta_d['exp_exp_obs'].stack()  # [T, B, num_classes_kn, z]
             self.H_exp_exp_obs = ta_d['H_exp_exp_obs'].stack()
             self.exp_H = ta_d['exp_H'].stack()
             self.potential_actions = ta_d['potential_actions'].stack()  # [T,B,n_policies,loc]
@@ -186,6 +186,15 @@ class predRSSM(base.Base):
 
         with tf.name_scope('Losses'):
             with tf.name_scope('RL'):
+                # if FLAGS.rl_reward == 'G':
+                #     def re_normalise(x, axis=-1):
+                #         return x / tf.reduce_sum(x, axis=axis)
+                #     believes = self.state_believes[:-1]  # [T,B,hyp]
+                #     believes_tiled = repeat_axis(believes, axis=1, repeats=self.n_policies)  # [T, B, hyp] -> [T, B * n_policies, hyp]
+                #
+                #
+                # elif FLAGS.rl_reward == 'clf':
+                #     returns = tf.cumsum(rewards, reverse=True, axis=0)
                 returns = tf.cumsum(rewards, reverse=True, axis=0)
                 policy_losses = policyNet.REINFORCE_losses(returns, bl_loc, self.actions, actions_mean)  # [T,B]
                 policy_loss   = tf.reduce_sum(tf.reduce_mean(policy_losses, 1))

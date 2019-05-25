@@ -29,11 +29,16 @@ class Base:
             best_belief = tf.where(tf.greater(state['uk_belief'], tf.reduce_max(state['c'], axis=1)), tf.fill([self.B], self.uk_label), best_belief)
         return best_belief
 
+    @staticmethod
+    def _hyp_tiling(n_classes, n_tiles):
+        one_hot = tf.one_hot(tf.range(n_classes), depth=n_classes)  # [n_classes, n_classes]
+        return tf.tile(one_hot, [n_tiles, 1])  # [B*n_tiles, n_classes]
+
     def single_policy_prediction(self, state, z_samples=None, next_actions=None):
         if z_samples is not None:
             state = self.stateTransition([z_samples, next_actions], state)
 
-        hyp = tf.tile(tf.one_hot(tf.range(self.num_classes_kn), depth=self.num_classes_kn), [self.B, 1])
+        hyp = self._hyp_tiling(n_classes=self.num_classes_kn, n_tiles=self.B * 1)  # [B * 1 * n_classes_kn, n_classes_k]
         new_s_tiled = repeat_axis(state['s'], axis=0, repeats=self.num_classes_kn)  # [B, rnn] -> [B * hyp, rnn]
         new_l_tiled = repeat_axis(state['l'], axis=0, repeats=self.num_classes_kn)  # [B, loc] -> [B * hyp, loc]
 

@@ -6,10 +6,9 @@ from tools.tf_tools import FiLM_layer, pseudo_LogRelaxedBernoulli
 
 
 class BeliefUpdate:
-    def __init__(self, FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name='BeliefUpdate'):
+    def __init__(self, FLAGS, submodules, batch_size, labels, current_cycl_uk, name='BeliefUpdate'):
         self.m = submodules
         self.name = name
-        self.n_policies = n_policies
         self.B = batch_size
         self.uk_label = FLAGS.uk_label
         self.labels = labels
@@ -27,6 +26,9 @@ class BeliefUpdate:
     def update(self, current_state, new_observation, exp_zs_prior, time, newly_done):
         """Given a new observation, and the last believes over the state, update the believes over the states.
         The sufficient statistic of the old state in this case is z, as the VAEencoder is class-specific.
+
+        Args:
+            exp_zs_prior: prior for the *selected* location policy for all hypotheses, [B, hyp, glimpse]
 
         Returns:
             c: [B, num_classes} believe over classes based on past observations
@@ -75,10 +77,10 @@ class BeliefUpdate:
                    )
 
     def calc_KLdiv(self, z_prior, z_post):
-        post_mu = tf.tile(z_post['mu'][:, tf.newaxis, :], [1, self.n_policies, 1])
+        post_mu = tf.tile(z_post['mu'][:, tf.newaxis, :], [1, self.num_classes_kn, 1])
 
         if self.z_dist == 'N':
-            post_sigma = tf.tile(z_post['sigma'][:, tf.newaxis, :], [1, self.n_policies, 1])
+            post_sigma = tf.tile(z_post['sigma'][:, tf.newaxis, :], [1, self.num_classes_kn, 1])
 
             dist_prior = tfd.Normal(loc=z_prior['mu'], scale=z_prior['sigma'])
             dist_post = tfd.Normal(loc=post_mu, scale=post_sigma)
@@ -86,7 +88,7 @@ class BeliefUpdate:
         elif self.z_dist == 'B':
             if self.z_B_kl in [20, 21]:
                 # Monte carlo approximation on the logistic node (a true lower bound but can exhibit higher variance)
-                post_log_sample = tf.tile(z_post['log_sample'][:, tf.newaxis, :], [1, self.n_policies, 1])
+                post_log_sample = tf.tile(z_post['log_sample'][:, tf.newaxis, :], [1, self.num_classes_kn, 1])
                 dist_prior = pseudo_LogRelaxedBernoulli(logits=z_prior['mu'], temperature=self.m['VAEEncoder'].temp_prior)
                 dist_post  = pseudo_LogRelaxedBernoulli(logits=post_mu, temperature=self.m['VAEEncoder'].temp_post)
                 KLdiv = dist_post.log_prob(post_log_sample) - dist_prior.log_prob(post_log_sample)  # [B, hyp, z]
@@ -123,8 +125,8 @@ class BeliefUpdate:
 
 
 class PredErrorUpdate(BeliefUpdate):
-    def __init__(self, FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name='BeliefUpdate'):
-        super().__init__(FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name)
+    def __init__(self, FLAGS, submodules, batch_size, labels, current_cycl_uk, name='BeliefUpdate'):
+        super().__init__(FLAGS, submodules, batch_size, labels, current_cycl_uk, name)
 
     def update_fn(self, current_state, predError, time, newly_done):
         # c = expanding_mean(tf.nn.softmax(-predError, axis=1), current_state['c'], time)
@@ -158,8 +160,8 @@ class PredErrorUpdate(BeliefUpdate):
 
 
 class FullyConnectedUpdate(BeliefUpdate):
-    def __init__(self, FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name='BeliefUpdate'):
-        super().__init__(FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name)
+    def __init__(self, FLAGS, submodules, batch_size, labels, current_cycl_uk, name='BeliefUpdate'):
+        super().__init__(FLAGS, submodules, batch_size, labels, current_cycl_uk, name)
 
     def update_fn(self, current_state, predError, time, newly_done):
         # TODO: AGGREGATE THE RAW VALUES OR SOFTMAX AT EACH STEP?
@@ -179,8 +181,8 @@ class FullyConnectedUpdate(BeliefUpdate):
 
 
 class RAMUpdate(BeliefUpdate):
-    def __init__(self, FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name='BeliefUpdate'):
-        super().__init__(FLAGS, submodules, n_policies, batch_size, labels, current_cycl_uk, name)
+    def __init__(self, FLAGS, submodules, batch_size, labels, current_cycl_uk, name='BeliefUpdate'):
+        super().__init__(FLAGS, submodules, batch_size, labels, current_cycl_uk, name)
 
     def update_fn(self, current_state, predError, time, newly_done):
         """Propagating xent gradients into current_state['s']"""

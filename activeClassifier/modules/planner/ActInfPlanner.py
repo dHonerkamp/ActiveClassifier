@@ -9,7 +9,7 @@ class ActInfPlanner(Base):
     def __init__(self, FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition, C):
         super().__init__(FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition)
         self.max_glimpses = FLAGS.num_glimpses
-        self.n_policies = FLAGS.num_classes_kn
+        self.n_policies = 1 if FLAGS.rl_reward == 'G1' else FLAGS.num_classes_kn
         self.num_classes_kn = FLAGS.num_classes_kn
         self.z_dist = FLAGS.z_dist
         self.B = batch_sz
@@ -95,10 +95,11 @@ class ActInfPlanner(Base):
             # TODO: define inputs for policyNet (and use the same in reinforce-planner if using it for pre-training)`
             # inputs = [current_state['s'], tf.fill([self.B, 1], tf.cast(time, tf.float32))]
             inputs = [current_state['s']]
+            policy_dep_input = self.policy_dep_input if (self.n_policies > 1) else None
             next_actions, next_actions_mean = self.m['policyNet'].next_actions(inputs=inputs,
                                                                                is_training=is_training,
                                                                                n_policies=self.n_policies,
-                                                                               policy_dep_input=self.policy_dep_input)
+                                                                               policy_dep_input=policy_dep_input)
             # action specific state transition
             new_state = self.stateTransition([z_samples, next_actions], current_state)
 
@@ -112,10 +113,7 @@ class ActInfPlanner(Base):
                                                                 new_s_tiled,
                                                                 new_l_tiled)
                 exp_obs = tf.reshape(exp_obs_prior['mu'], [self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size])  # [B, n_policies, hyp, glimpse]
-                if self.z_dist != 'B':
-                    exp_obs_sigma = tf.reshape(exp_obs_prior['sigma'], [self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size])  # [B, n_policies, hyp, glimpse]
-                else:
-                    exp_obs_sigma = None
+                exp_obs_sigma = tf.reshape(exp_obs_prior['sigma'], [self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size]) if exp_obs_prior['sigma'] else exp_obs_prior['sigma']
 
             G_obs, exp_exp_obs, exp_H, H_exp_exp_obs = self.calc_G_obs_prePreferences(exp_obs, exp_obs_sigma, new_state['c'])
 
@@ -156,11 +154,17 @@ class ActInfPlanner(Base):
             selected_action_idx = tf.where(tf.stop_gradient(dec), tf.fill([self.B], 0),
                                            selected_action_idx)  # replace decision indeces (which exceed the shape of selected_action), so we can use gather on the locations
 
-        coords = tf.stack(tf.meshgrid(tf.range(self.B)) + [selected_action_idx], axis=1)
-        selected_action      = tf.gather_nd(next_actions, coords)
-        selected_action_mean = tf.gather_nd(next_actions_mean, coords)
-        selected_exp_obs     = {k: tf.gather_nd(tf.reshape(v, [self.B, self.n_policies, self.num_classes_kn, -1]), coords) if (v is not None) else None
+        if self.n_policies > 1:
+            coords = tf.stack(tf.meshgrid(tf.range(self.B)) + [selected_action_idx], axis=1)
+            selected_action      = tf.gather_nd(next_actions, coords)
+            selected_action_mean = tf.gather_nd(next_actions_mean, coords)
+            selected_exp_obs     = {k: tf.gather_nd(tf.reshape(v, [self.B, self.n_policies, self.num_classes_kn, v.shape[-1]]), coords) if (v is not None) else None
+                                    for k, v in exp_obs_prior.items()}  # -> [B, num_classes_kn, -1] as n_policies get removed in gather_nd
+        else:
+            selected_action, selected_action_mean = next_actions, next_actions_mean
+            selected_exp_obs = {k: tf.reshape(v, [self.B, self.num_classes_kn, v.shape[-1]]) if (v is not None) else None
                                 for k, v in exp_obs_prior.items()}
+            next_actions = next_actions[:, tf.newaxis, :]  # squeezed in policyNet
 
         records = {'G'                : G,
                    'exp_obs'          : exp_obs,  # [B, n_policies, num_classes, -1]

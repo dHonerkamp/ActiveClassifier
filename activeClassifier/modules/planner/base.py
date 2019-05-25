@@ -46,7 +46,7 @@ class Base:
                                                   new_s_tiled,
                                                   new_l_tiled)
 
-        return {k: tf.reshape(v, [self.B, self.num_classes_kn, -1]) if (v is not None) else None for k, v in exp_obs.items()}
+        return {k: tf.reshape(v, [self.B, self.num_classes_kn, v.shape[-1]]) if (v is not None) else None for k, v in exp_obs.items()}
 
     def initial_planning(self):
         selected_action, selected_action_mean = self.m['policyNet'].inital_loc()

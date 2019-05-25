@@ -113,7 +113,6 @@ class predRSSM(base.Base):
 
                 bl_inputs = tf.concat([current_state['c'], current_state['s']], axis=1)
                 baseline = tf.squeeze(fc_baseline(tf.stop_gradient(bl_inputs)), 1)
-
                 observation, corr_classification_fb, done = env.step(next_action, next_decision)
                 newly_done = done
                 done = tf.logical_or(last_done, done)
@@ -186,6 +185,11 @@ class predRSSM(base.Base):
 
         with tf.name_scope('Losses'):
             with tf.name_scope('RL'):
+                if (FLAGS.planner == 'ActInf') and (FLAGS.rl_reward == 'G1'):
+                    assert planner.n_policies == 1
+                    # TD-returns: no cumsum
+                    # TODO: use G before the prior preferences to remove noise from lower valued for more than 4 glimpses?
+                    returns = self.G[:, :, 0]  # excluding the decision action
                 # if FLAGS.rl_reward == 'G':
                 #     def re_normalise(x, axis=-1):
                 #         return x / tf.reduce_sum(x, axis=axis)
@@ -193,9 +197,8 @@ class predRSSM(base.Base):
                 #     believes_tiled = repeat_axis(believes, axis=1, repeats=self.n_policies)  # [T, B, hyp] -> [T, B * n_policies, hyp]
                 #
                 #
-                # elif FLAGS.rl_reward == 'clf':
-                #     returns = tf.cumsum(rewards, reverse=True, axis=0)
-                returns = tf.cumsum(rewards, reverse=True, axis=0)
+                else:
+                    returns = tf.cumsum(rewards, reverse=True, axis=0)
                 policy_losses = policyNet.REINFORCE_losses(returns, bl_loc, self.actions, actions_mean)  # [T,B]
                 policy_loss   = tf.reduce_sum(tf.reduce_mean(policy_losses, 1))
                 # baseline is calculated before taking a new obs, rewards with same index thereafter

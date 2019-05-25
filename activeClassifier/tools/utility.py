@@ -140,6 +140,7 @@ class Utility(object):
         #          'polarRel: r, theta')
         # more important settings
         parser.add_argument('--planner', type=str, default='ActInf', choices=['ActInf', 'RL'], help='Planning strategy.')
+        parser.add_argument('--rl_reward', type=str, default='clf', choices=['clf', 'G1'], help='Rewards for ActInf location policy. For other planners always clf.')
         parser.add_argument('--beliefUpdate', type=str, default='fb', choices=['fb', 'fc', 'RAM'], help='Belief update strategy.')
         parser.add_argument('--normalise_fb', type=int, default=0, choices=[0, 1, 2], help='Use min_normalisation for prediction fb or not. 1: divide by baseline, 1: subtract baseline')
         parser.add_argument('--prior_preference_c', type=int, default=2, help='Strength of preferences for correct / wrong classification.')
@@ -242,7 +243,7 @@ class Utility(object):
         # os.environ['TF_CPP_MIN_VLOG_LEVEL'] = '2'
 
         if unparsed:
-            logging.info('UNPARSED: {}'.format(unparsed))
+            raise ValueError('UNPARSED: {}'.format(unparsed))
         logging.info(sys.argv)
 
         # reproducibility (not guaranteed if run on GPU or different platforms)

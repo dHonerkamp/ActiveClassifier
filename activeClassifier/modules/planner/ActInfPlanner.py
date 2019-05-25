@@ -38,39 +38,41 @@ class ActInfPlanner(Base):
         return tf.reduce_mean(H, axis=-1)  # [B * n_policies * hyp]
 
     def _exp_H(self, exp_obs_mu, exp_obs_sigma, c_believes):
+        """
+        Args:
+            exp_obs_mu, exp_obs_sigma: [B, n_policies, hyp, glimpse]
+            c_believes: [B, hyp]
+        Returns:
+            exp_H: [B, n_policies]
+        """
         # TODO: HOW TO DEFINE ENTROPY OVER INDEPENDENT BERNOULLI (WITHOUT EXPLODING COMBINATORICS) OR NORMAL DIST
         if self.z_dist == 'B':
-            exp_obs_mu_flat = self._flatten_obs(exp_obs_mu)  # [B * n_policies * hyp, glimpse]
-            H = self._binary_entropy_agg(logits=exp_obs_mu_flat)  # [B * n_policies * hyp]
+            H = self._binary_entropy_agg(logits=exp_obs_mu)  # [B, n_policies, hyp]
         elif self.z_dist == 'N':
-            exp_obs_sigma_flat = self._flatten_obs(exp_obs_sigma)
-            H = differential_entropy_diag_normal(exp_obs_sigma_flat)  # [B * n_policies * hyp]
+            H = differential_entropy_diag_normal(exp_obs_sigma)  # [B, n_policies, hyp]
         else:
             raise ValueError('Unknown z_dist: {}'.format(self.z_dist))
 
-        H = tf.reshape(H, [self.B * self.n_policies, self.num_classes_kn])
-        new_c_tiled = repeat_axis(c_believes, axis=0, repeats=self.n_policies)  # [B, hyp] -> [B * n_policies, hyp]
-        exp_H = tf.reduce_sum(new_c_tiled * H, axis=1)  # [B * n_policies]
+        new_c_tiled = c_believes[:, tf.newaxis, :]  # [B, hyp] -> [B, 1, hyp] -> broadcasting into [B, n_policies, hyp]
+        exp_H = tf.reduce_sum(new_c_tiled * H, axis=2)  # [B, n_policies]
         return exp_H
 
     def _H_exp_exp(self, exp_obs, c_believes):
         exp_exp_obs = tf.einsum('bh,bkhg->bkg', c_believes, exp_obs)  # [B, n_policies, glimpse]
-        exp_exp_obs_flat = self._flatten_obs(exp_exp_obs)
         if self.z_dist == 'B':
-            H_exp_exp_obs = self._binary_entropy_agg(logits=exp_exp_obs_flat)  # [B * n_policies]
+            H_exp_exp_obs = self._binary_entropy_agg(logits=exp_exp_obs)  # [B, n_policies]
         else:
             # TODO: HOW TO DO THIS FOR NORMAL DISTRIBUTED CODE?
             raise ValueError('H_exp_exp not implemented for this distribution: {}'.format(self.z_dist))
         return H_exp_exp_obs, exp_exp_obs
 
     def calc_G_obs_prePreferences(self, exp_obs, exp_obs_sigma, c_believes):
-        # TODO: MIGHT NOT NEED ALL THE RESHAPES
         # expected entropy
         exp_H = self._exp_H(exp_obs, exp_obs_sigma, c_believes)
         # Entropy of the expectation
         H_exp_exp_obs, exp_exp_obs = self._H_exp_exp(exp_obs, c_believes)
         G = H_exp_exp_obs - exp_H
-        return tf.reshape(G, [self.B, self.n_policies]), exp_exp_obs, exp_H, H_exp_exp_obs
+        return G, exp_exp_obs, exp_H, H_exp_exp_obs
 
     def _G_decision(self, time, c_believes):
         # decision actions: will always assign 0 probabiity to any of the non-decsion actions, i.e. those won't impact the entropy
@@ -164,7 +166,7 @@ class ActInfPlanner(Base):
         records = {'G'                : G,
                    'exp_obs'          : exp_obs,  # [B, n_policies, num_classes, -1]
                    'exp_exp_obs'      : exp_exp_obs,  # [B, n_policies, -1]
-                   'H_exp_exp_obs'    : tf.reshape(H_exp_exp_obs, [self.B, self.n_policies]),
-                   'exp_H'            : tf.reshape(exp_H, [self.B, self.n_policies]),
+                   'H_exp_exp_obs'    : H_exp_exp_obs,
+                   'exp_H'            : exp_H,
                    'potential_actions': next_actions}
         return decision, selected_action, selected_action_mean, selected_exp_obs, records

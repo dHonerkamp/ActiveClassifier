@@ -59,7 +59,7 @@ def differential_entropy_normal(sigma, axis=-1):
 
 def differential_entropy_diag_normal(sigma, axis=-1):
     """Compute the differential entropy of a normal distribution. Can be negative!"""
-    N = tf.cast(tf.shape(sigma)[axis], tf.float32)
+    N = tf.reduce_prod(tf.cast(tf.shape(sigma)[axis], tf.float32))
     det = tf.reduce_prod(sigma, axis)
     entr = 0.5 * tf.log(tf.sqrt(2 * math.pi * math.e)**N * det)
     return entr

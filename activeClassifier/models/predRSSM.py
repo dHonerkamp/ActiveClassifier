@@ -142,9 +142,9 @@ class predRSSM(base.Base):
                 ta_d['decisions'] = write_zero_out(time, ta_d['decisions'], next_decision, last_done)
                 # copy forward
                 classification_decision = tf.where(last_done, last_decision, next_decision)
+                last_decision = tf.where(last_done, last_decision, next_decision)
                 # pass on to next time step
                 last_done = done
-                last_decision = next_decision
                 last_z = z_samples
                 # last_c = current_c  # TODO: could also use the one from planning (new_c) or pi
                 last_state = current_state
@@ -190,6 +190,7 @@ class predRSSM(base.Base):
                     # TD-returns: no cumsum
                     # TODO: use G before the prior preferences to remove noise from lower valued for more than 4 glimpses?
                     returns = self.G[:, :, 0]  # excluding the decision action
+                    # returns = tf.squeeze(self.H_exp_exp_obs - self.exp_H, -1)
                 # if FLAGS.rl_reward == 'G':
                 #     def re_normalise(x, axis=-1):
                 #         return x / tf.reduce_sum(x, axis=axis)

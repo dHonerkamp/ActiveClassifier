@@ -94,7 +94,7 @@ class ActInfPlanner(Base):
         with tf.name_scope('Planning_loop/'):  # loop over policies, parallised into [B * self.n_policies, ...]
             # TODO: define inputs for policyNet (and use the same in reinforce-planner if using it for pre-training)`
             # inputs = [current_state['s'], tf.fill([self.B, 1], tf.cast(time, tf.float32))]
-            inputs = [current_state['s']]
+            inputs = [current_state['s']] if (self.n_policies > 1) else [current_state['c'], current_state['s']]
             policy_dep_input = self.policy_dep_input if (self.n_policies > 1) else None
             next_actions, next_actions_mean = self.m['policyNet'].next_actions(inputs=inputs,
                                                                                is_training=is_training,
@@ -146,13 +146,12 @@ class ActInfPlanner(Base):
             # give back the action itself, not its index. Differentiate between decision and location actions
             best_belief = self._best_believe(new_state)
             dec = tf.equal(selected_action_idx, self.n_policies)  # the last action is the decision
+            selected_action_idx = tf.where(tf.stop_gradient(dec), tf.fill([self.B], 0), selected_action_idx)  # replace decision indeces (which exceed the shape of selected_action), so we can use gather on the locations
 
             decision = tf.cond(tf.equal(time, self.max_glimpses - 1),
                                lambda: best_belief,  # always take a decision at the last time step
                                lambda: tf.where(dec, best_belief, tf.fill([self.B], -1)),
                                name='last_timestep_decision_cond')
-            selected_action_idx = tf.where(tf.stop_gradient(dec), tf.fill([self.B], 0),
-                                           selected_action_idx)  # replace decision indeces (which exceed the shape of selected_action), so we can use gather on the locations
 
         if self.n_policies > 1:
             coords = tf.stack(tf.meshgrid(tf.range(self.B)) + [selected_action_idx], axis=1)

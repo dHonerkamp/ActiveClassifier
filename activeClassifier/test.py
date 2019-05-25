@@ -49,23 +49,23 @@ def env_step(env):
         print(done)
 
 
-def hyp_tiling():
-    num_classes = 5
-    hyp = tf.tile(tf.one_hot(tf.range(num_classes), depth=num_classes),
-                  [2, 1])
-
-    with tf.Session() as sess:
-        out = sess.run(hyp)
-        assert (out == [[1., 0., 0., 0., 0.],
-                        [0., 1., 0., 0., 0.],
-                        [0., 0., 1., 0., 0.],
-                        [0., 0., 0., 1., 0.],
-                        [0., 0., 0., 0., 1.],
-                        [1., 0., 0., 0., 0.],
-                        [0., 1., 0., 0., 0.],
-                        [0., 0., 1., 0., 0.],
-                        [0., 0., 0., 1., 0.],
-                        [0., 0., 0., 0., 1.]]).all()
+# def hyp_tiling():
+#     num_classes = 5
+#     hyp = tf.tile(tf.one_hot(tf.range(num_classes), depth=num_classes),
+#                   [2, 1])
+#
+#     with tf.Session() as sess:
+#         out = sess.run(hyp)
+#         assert (out == [[1., 0., 0., 0., 0.],
+#                         [0., 1., 0., 0., 0.],
+#                         [0., 0., 1., 0., 0.],
+#                         [0., 0., 0., 1., 0.],
+#                         [0., 0., 0., 0., 1.],
+#                         [1., 0., 0., 0., 0.],
+#                         [0., 1., 0., 0., 0.],
+#                         [0., 0., 1., 0., 0.],
+#                         [0., 0., 0., 1., 0.],
+#                         [0., 0., 0., 0., 1.]]).all()
 
 def hyp_tiling2():
     num_classes = 5

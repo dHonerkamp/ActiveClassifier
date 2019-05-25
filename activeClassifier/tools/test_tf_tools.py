@@ -32,5 +32,6 @@ class RepeatsTest(tf.test.TestCase):
         with self.test_session():
             self.assertAllEqual(x1, x2.eval())
 
+
 if __name__ == '__main__':
     tf.test.main()

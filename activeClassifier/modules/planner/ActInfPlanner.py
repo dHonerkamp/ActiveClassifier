@@ -17,13 +17,19 @@ class ActInfPlanner(Base):
         self.alpha = FLAGS.precision_alpha
 
         # No need to tile at every step
-        self.hyp = tf.tile(tf.one_hot(tf.range(FLAGS.num_classes_kn), depth=FLAGS.num_classes_kn),
-                           [batch_sz * self.n_policies, 1])  # [B * n_policies * hyp, num_classes]
+        self.hyp = self._hyp_tiling(FLAGS.num_classes_kn, self.B * self.n_policies)  # [B * n_policies * hyp, num_classes]
+
+
         self.policy_dep_input =  tf.tile(tf.one_hot(tf.range(FLAGS.num_classes_kn), depth=FLAGS.num_classes_kn)[:, tf.newaxis, :],
                                          [1, batch_sz, 1])  # [hyp, B, num_classes]
 
     def _flatten_obs(self, obs):
         return tf.reshape(obs, [self.B * self.n_policies * self.num_classes_kn, self.m['VAEEncoder'].output_size])
+
+    @staticmethod
+    def _hyp_tiling(n_classes, n_tiles):
+        one_hot = tf.one_hot(tf.range(n_classes), depth=n_classes)  # [n_classes, n_classes]
+        return tf.tile(one_hot, [n_tiles, 1])  # [n_tiles * n_classes, n_classes]
 
     @staticmethod
     def _binary_entropy_agg(logits):
@@ -34,7 +40,7 @@ class ActInfPlanner(Base):
     def _exp_H(self, exp_obs_mu, exp_obs_sigma, c_believes):
         # TODO: HOW TO DEFINE ENTROPY OVER INDEPENDENT BERNOULLI (WITHOUT EXPLODING COMBINATORICS) OR NORMAL DIST
         if self.z_dist == 'B':
-            exp_obs_mu_flat = self._flatten_obs(exp_obs_mu)
+            exp_obs_mu_flat = self._flatten_obs(exp_obs_mu)  # [B * n_policies * hyp, glimpse]
             H = self._binary_entropy_agg(logits=exp_obs_mu_flat)  # [B * n_policies * hyp]
         elif self.z_dist == 'N':
             exp_obs_sigma_flat = self._flatten_obs(exp_obs_sigma)
@@ -56,6 +62,15 @@ class ActInfPlanner(Base):
             # TODO: HOW TO DO THIS FOR NORMAL DISTRIBUTED CODE?
             raise ValueError('H_exp_exp not implemented for this distribution: {}'.format(self.z_dist))
         return H_exp_exp_obs, exp_exp_obs
+
+    def calc_G_obs_prePreferences(self, exp_obs, exp_obs_sigma, c_believes):
+        # TODO: MIGHT NOT NEED ALL THE RESHAPES
+        # expected entropy
+        exp_H = self._exp_H(exp_obs, exp_obs_sigma, c_believes)
+        # Entropy of the expectation
+        H_exp_exp_obs, exp_exp_obs = self._H_exp_exp(exp_obs, c_believes)
+        G = H_exp_exp_obs - exp_H
+        return tf.reshape(G, [self.B, self.n_policies]), exp_exp_obs, exp_H, H_exp_exp_obs
 
     def _G_decision(self, time, c_believes):
         # decision actions: will always assign 0 probabiity to any of the non-decsion actions, i.e. those won't impact the entropy
@@ -96,23 +111,20 @@ class ActInfPlanner(Base):
                                                                 new_s_tiled,
                                                                 new_l_tiled)
                 exp_obs = tf.reshape(exp_obs_prior['mu'], [self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size])  # [B, n_policies, hyp, glimpse]
-                exp_obs_sigma = tf.reshape(exp_obs_prior['sigma'], [self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size])  # [B, n_policies, hyp, glimpse]
+                if self.z_dist != 'B':
+                    exp_obs_sigma = tf.reshape(exp_obs_prior['sigma'], [self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size])  # [B, n_policies, hyp, glimpse]
+                else:
+                    exp_obs_sigma = None
 
-            # expected entropy
-            exp_H = self._exp_H(exp_obs, exp_obs_sigma, new_state['c'])
-
-            # Entropy of the expectation
-            H_exp_exp_obs, exp_exp_obs = self._H_exp_exp(exp_obs, new_state['c'])
+            G_obs, exp_exp_obs, exp_H, H_exp_exp_obs = self.calc_G_obs_prePreferences(exp_obs, exp_obs_sigma, new_state['c'])
 
             # For all non-decision actions the probability of classifying is 0, hence the probability of an observation is 1
-            preference_error = 1. * self.C[time, 0]
-
-            G = H_exp_exp_obs - exp_H
-            G = tf.reshape(G, [self.B, self.n_policies]) + preference_error
+            preference_error_obs = 1. * self.C[time, 0]
+            G_obs += preference_error_obs
 
             # decision actions
-            dec_G = self._G_decision(time, new_state['c'])
-            G = tf.concat([G, dec_G[:, tf.newaxis]], axis=1)
+            G_dec = self._G_decision(time, new_state['c'])
+            G = tf.concat([G_obs, G_dec[:, tf.newaxis]], axis=1)
 
             # G = tf.Print(G, [time, 'H', tf.reduce_mean(exp_H), 'Hexpexp', tf.reduce_mean(H_exp_exp_obs), 'ext', tf.reduce_mean(preference_error), 'G', tf.reduce_mean(G, axis=0)], summarize=30)
 

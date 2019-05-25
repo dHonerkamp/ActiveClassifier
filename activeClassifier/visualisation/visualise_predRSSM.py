@@ -219,12 +219,11 @@ class Visualization_predRSSM(Base):
                     self._plot_img_plus_locs(axes[0, i], d['x'][i], d['y'][i], d['clf'][i], d['locs'][:, i, :], d['decisions'][:, i])
                     axes[t, i].set_title('t: {}, random policy, lbl: {}, clf: {}'.format(t, d['y'][i], d['clf'][i]))
                 else:
+                    # plot patches seen until now
+                    self._plot_seen(d['x'][i], d['locs'][:, i], until_t=t, ax=axes[t, i])
                     if np.sum(d['H_exp_exp_obs'][t, i, :]) == 0.:
                         axes[t, i].set_title('t: {}, decision - no glimpse'.format(t))
                         continue
-
-                    # plot patches seen until now
-                    self._plot_seen(d['x'][i], d['locs'][:, i], until_t=t, ax=axes[t, i])
                     axes[t, i].set_title('t: {}, selected policy: {}'.format(t, np.argmax(d['G'][t, i, :])))
 
                     # plot rectangles for evaluated next locations
@@ -249,9 +248,7 @@ class Visualization_predRSSM(Base):
                     axes[t, i].set_position([chartBox.x0, chartBox.y0, chartBox.width * 0.6, chartBox.height])
                     axes[t, i].legend(loc='center left', bbox_to_anchor=(1.04, 0.5), borderaxespad=0)
 
-        [ax.set_xticks([])  for ax in axes.ravel()]
-        [ax.set_yticks([])  for ax in axes.ravel()]
-        [ax.set_axis_off() for ax in axes[-1, :].ravel()]
+        [(ax.set_xticks([]), ax.set_yticks([]), ax.set_axis_off())  for ax in axes.ravel()]
         self._save_fig(f, folder_name, '{}{}.png'.format(self.prefix, suffix))
 
     def plot_fb(self, d, suffix=''):

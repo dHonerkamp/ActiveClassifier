@@ -185,6 +185,7 @@ class predRSSM(base.Base):
 
         with tf.name_scope('Losses'):
             with tf.name_scope('RL'):
+                # TODO: WITH RL AS PRE-TRAINING THIS MEANS THE REWARDS ARE CHANGED WHEN MOVING TO MAIN PHASE
                 if (FLAGS.planner == 'ActInf') and (FLAGS.rl_reward == 'G1'):
                     assert planner.n_policies == 1
                     # TD-returns: no cumsum

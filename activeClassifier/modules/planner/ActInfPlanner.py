@@ -87,6 +87,44 @@ class ActInfPlanner(Base):
         dec_G = dec_extr_value - dec_H
         return dec_G
 
+    def _action_selection(self, next_actions, next_actions_mean, new_state, G, exp_obs_prior, time, is_training):
+        # TODO: use pi = softmax(-F - gamma*G) instead?
+        gamma = 1
+        pi_logits = tf.nn.log_softmax(gamma * G)
+        # Incorporate past into the decision. But what to use for the 2 decision actions?
+        # pi_logits = tf.nn.log_softmax(tf.log(new_state['c']) + gamma * G)
+
+        # TODO: precision?
+        # TODO: which version of action selection?
+        # Visual foraging code: a_t ~ softmax(alpha * log(softmax(-F - gamma * G))) with alpha=512
+        # Visual foraging paper: a_t = min_a[ o*_t+1 * [log(o*_t+1) - log(o^a_t+1)] ]
+        # Maze code: a_t ~ softmax(gamma * G) [summed over policies with the same next action]
+        selected_action_idx = tf.cond(is_training,
+                                      lambda: tfd.Categorical(logits=self.alpha * pi_logits, allow_nan_stats=False).sample(),
+                                      lambda: tf.argmax(G, axis=1, output_type=tf.int32),
+                                      name='sample_action_cond')
+        # give back the action itself, not its index. Differentiate between decision and location actions
+        best_belief = self._best_believe(new_state)
+        dec = tf.equal(selected_action_idx, self.n_policies)  # the last action is the decision
+        selected_action_idx = tf.where(tf.stop_gradient(dec), tf.fill([self.B], 0), selected_action_idx)  # replace decision indeces (which exceed the shape of selected_action), so we can use gather on the locations
+
+        decision = tf.cond(tf.equal(time, self.max_glimpses - 1),
+                           lambda: best_belief,  # always take a decision at the last time step
+                           lambda: tf.where(dec, best_belief, tf.fill([self.B], -1)),
+                           name='last_timestep_decision_cond')
+
+        if self.n_policies == 1:
+            selected_action, selected_action_mean = next_actions, next_actions_mean
+            selected_exp_obs = {k: tf.reshape(v, [self.B, self.num_classes_kn, v.shape[-1]]) if (v is not None) else None
+                                for k, v in exp_obs_prior.items()}
+        else:
+            coords = tf.stack(tf.meshgrid(tf.range(self.B)) + [selected_action_idx], axis=1)
+            selected_action      = tf.gather_nd(next_actions, coords)
+            selected_action_mean = tf.gather_nd(next_actions_mean, coords)
+            selected_exp_obs     = {k: tf.gather_nd(tf.reshape(v, [self.B, self.n_policies, self.num_classes_kn, v.shape[-1]]), coords) if (v is not None) else None
+                                    for k, v in exp_obs_prior.items()}  # -> [B, num_classes_kn, -1] as n_policies get removed in gather_nd
+        return decision, selected_action, selected_action_mean, selected_exp_obs
+
     def planning_step(self, current_state, z_samples, time, is_training):
         """Perform one planning step.
         Args:
@@ -99,7 +137,7 @@ class ActInfPlanner(Base):
             # TODO: define inputs for policyNet (and use the same in reinforce-planner if using it for pre-training)`
             # inputs = [current_state['s'], tf.fill([self.B, 1], tf.cast(time, tf.float32))]
             if self.n_policies == 1:  # 'G1'
-                inputs = [current_state['c'], current_state['s']]
+                inputs = [current_state['s'], current_state['c']]
             elif self.rl_reward == 'clf':
                 assert self.n_policies == self.num_classes_kn
                 inputs = [repeat_axis(current_state['s'], axis=0, repeats=self.num_classes_kn), self.policy_dep_input]
@@ -132,59 +170,21 @@ class ActInfPlanner(Base):
                 exp_obs_sigma = tf.reshape(exp_obs_prior['sigma'], [self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size]) if exp_obs_prior['sigma'] else exp_obs_prior['sigma']
 
             G_obs, exp_exp_obs, exp_H, H_exp_exp_obs = self.calc_G_obs_prePreferences(exp_obs, exp_obs_sigma, new_state['c'])
-
             # For all non-decision actions the probability of classifying is 0, hence the probability of an observation is 1
             preference_error_obs = 1. * self.C[time, 0]
             G_obs += preference_error_obs
-
             # decision actions
             G_dec = self._G_decision(time, new_state['c'])
             G = tf.concat([G_obs, G_dec[:, tf.newaxis]], axis=1)
-
             # G = tf.Print(G, [time, 'H', tf.reduce_mean(exp_H), 'Hexpexp', tf.reduce_mean(H_exp_exp_obs), 'ext', tf.reduce_mean(preference_error), 'G', tf.reduce_mean(G, axis=0)], summarize=30)
 
-            # TODO: use pi = softmax(-F - gamma*G) instead?
-            gamma = 1
-            pi_logits = tf.nn.log_softmax(gamma * G)
-            # Incorporate past into the decision. But what to use for the 2 decision actions?
-            # pi_logits = tf.nn.log_softmax(tf.log(new_state['c']) + gamma * G)
-
             # action selection
-            # TODO: precision?
-            # TODO: which version of action selection?
-            # Visual foraging code: a_t ~ softmax(alpha * log(softmax(-F - gamma * G))) with alpha=512
-            # Visual foraging paper: a_t = min_a[ o*_t+1 * [log(o*_t+1) - log(o^a_t+1)] ]
-            # Maze code: a_t ~ softmax(gamma * G) [summed over policies with the same next action]
-            selected_action_idx = tf.cond(is_training,
-                                          lambda: tfd.Categorical(logits=self.alpha * pi_logits, allow_nan_stats=False).sample(),
-                                          lambda: tf.argmax(G, axis=1, output_type=tf.int32),
-                                          name='sample_action_cond')
-            # give back the action itself, not its index. Differentiate between decision and location actions
-            best_belief = self._best_believe(new_state)
-            dec = tf.equal(selected_action_idx, self.n_policies)  # the last action is the decision
-            selected_action_idx = tf.where(tf.stop_gradient(dec), tf.fill([self.B], 0), selected_action_idx)  # replace decision indeces (which exceed the shape of selected_action), so we can use gather on the locations
-
-            decision = tf.cond(tf.equal(time, self.max_glimpses - 1),
-                               lambda: best_belief,  # always take a decision at the last time step
-                               lambda: tf.where(dec, best_belief, tf.fill([self.B], -1)),
-                               name='last_timestep_decision_cond')
-
-        if self.n_policies > 1:
-            coords = tf.stack(tf.meshgrid(tf.range(self.B)) + [selected_action_idx], axis=1)
-            selected_action      = tf.gather_nd(next_actions, coords)
-            selected_action_mean = tf.gather_nd(next_actions_mean, coords)
-            selected_exp_obs     = {k: tf.gather_nd(tf.reshape(v, [self.B, self.n_policies, self.num_classes_kn, v.shape[-1]]), coords) if (v is not None) else None
-                                    for k, v in exp_obs_prior.items()}  # -> [B, num_classes_kn, -1] as n_policies get removed in gather_nd
-        else:
-            selected_action, selected_action_mean = next_actions, next_actions_mean
-            selected_exp_obs = {k: tf.reshape(v, [self.B, self.num_classes_kn, v.shape[-1]]) if (v is not None) else None
-                                for k, v in exp_obs_prior.items()}
-            next_actions = next_actions[:, tf.newaxis, :]  # squeezed in policyNet
+            decision, selected_action, selected_action_mean, selected_exp_obs = self._action_selection(next_actions, next_actions_mean, new_state, G, exp_obs_prior, time, is_training)
 
         records = {'G'                : G,
                    'exp_obs'          : exp_obs,  # [B, n_policies, num_classes, -1]
                    'exp_exp_obs'      : exp_exp_obs,  # [B, n_policies, -1]
                    'H_exp_exp_obs'    : H_exp_exp_obs,
                    'exp_H'            : exp_H,
-                   'potential_actions': next_actions}
+                   'potential_actions': next_actions[:, tf.newaxis, :] if (self.n_policies == 1) else next_actions}
         return decision, selected_action, selected_action_mean, selected_exp_obs, records

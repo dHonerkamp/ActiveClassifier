@@ -8,6 +8,7 @@ class REINFORCEPlanner(Base):
         self.n_policies = 1
         self.num_glimpses = FLAGS.num_glimpses
         self._is_pre_phase = is_pre_phase
+        self.rl_reward = FLAGS.rl_reward
 
         # SEEMS TO LEARN TO CHEAT IF DOING THIS
         # if use_true_labels:
@@ -20,14 +21,14 @@ class REINFORCEPlanner(Base):
 
     def planning_step(self, current_state, z_samples, time, is_training):
         # TODO: CHECK EFFECT ON PERFORMANCE FROM INCLUDING THIS OR NOT (WHETHER INCLUDING IT MAKES THE MODEL FOCUS LESS ON LEARNING RECONSTRUCTIONS)
-        if self._is_pre_phase:
+        if self._is_pre_phase and (self.rl_reward == 'clf'):
             # TODO: ADJUST FOR UK CLASSES
             # policy_dep_input = tf.one_hot(tf.argmax(current_state['c'], axis=1), depth=self.num_classes_kn)
             policy_dep_input = tf.one_hot(self.lbls, depth=self.num_classes_kn)
             # inputs = [current_state['s'], tf.fill([self.B, 1], tf.cast(time, tf.float32))]
             inputs = [current_state['s'], policy_dep_input]
         else:
-            inputs = [current_state['c'], current_state['s']]
+            inputs = [current_state['s'], current_state['c']]
         next_action, next_action_mean = self.m['policyNet'].next_actions(inputs=inputs, is_training=is_training, n_policies=self.n_policies)
         next_exp_obs = self.single_policy_prediction(current_state, z_samples, next_action)
 

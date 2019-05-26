@@ -15,13 +15,11 @@ class ActInfPlanner(Base):
         self.B = batch_sz
         self.C = C
         self.alpha = FLAGS.precision_alpha
+        self.rl_reward = FLAGS.rl_reward
 
         # No need to tile at every step
         self.hyp = self._hyp_tiling(FLAGS.num_classes_kn, self.B * self.n_policies)  # [B * n_policies * hyp, num_classes]
-
-
-        self.policy_dep_input =  tf.tile(tf.one_hot(tf.range(FLAGS.num_classes_kn), depth=FLAGS.num_classes_kn)[:, tf.newaxis, :],
-                                         [1, batch_sz, 1])  # [hyp, B, num_classes]
+        self.policy_dep_input = self._hyp_tiling(self.num_classes_kn, self.B)  # [B * hyp, num_classes]
 
     @staticmethod
     def _binary_entropy_agg(logits):
@@ -29,7 +27,7 @@ class ActInfPlanner(Base):
         H = binary_entropy(logits=logits)  # [B * n_policies * hyp, z]
         return tf.reduce_mean(H, axis=-1)  # [B * n_policies * hyp]
 
-    def _exp_H(self, exp_obs_mu, exp_obs_sigma, c_believes):
+    def _exp_H(self, exp_obs_mu, exp_obs_sigma, c_believes=None, c_believes_tiled=None):
         """
         Args:
             exp_obs_mu, exp_obs_sigma: [B, n_policies, hyp, glimpse]
@@ -37,6 +35,7 @@ class ActInfPlanner(Base):
         Returns:
             exp_H: [B, n_policies]
         """
+        assert (c_believes is None) or (c_believes_tiled is None)
         # TODO: HOW TO DEFINE ENTROPY OVER INDEPENDENT BERNOULLI (WITHOUT EXPLODING COMBINATORICS) OR NORMAL DIST
         if self.z_dist == 'B':
             H = self._binary_entropy_agg(logits=exp_obs_mu)  # [B, n_policies, hyp]
@@ -44,13 +43,17 @@ class ActInfPlanner(Base):
             H = differential_entropy_diag_normal(exp_obs_sigma)  # [B, n_policies, hyp]
         else:
             raise ValueError('Unknown z_dist: {}'.format(self.z_dist))
-
-        new_c_tiled = c_believes[:, tf.newaxis, :]  # [B, hyp] -> [B, 1, hyp] -> broadcasting into [B, n_policies, hyp]
-        exp_H = tf.reduce_sum(new_c_tiled * H, axis=2)  # [B, n_policies]
+        if c_believes is not None:
+            c_believes_tiled = c_believes[:, tf.newaxis, :]  # [B, hyp] -> [B, 1, hyp] -> broadcasting into [B, n_policies, hyp]
+        exp_H = tf.reduce_sum(c_believes_tiled * H, axis=2)  # [B, n_policies]
         return exp_H
 
-    def _H_exp_exp(self, exp_obs, c_believes):
-        exp_exp_obs = tf.einsum('bh,bkhg->bkg', c_believes, exp_obs)  # [B, n_policies, glimpse]
+    def _H_exp_exp(self, exp_obs, c_believes=None, c_believes_tiled=None):
+        assert (c_believes is None) or (c_believes_tiled is None)
+        if c_believes is not None:
+            exp_exp_obs = tf.einsum('bh,bkhg->bkg', c_believes, exp_obs)  # [B, n_policies, glimpse]
+        else:
+            exp_exp_obs = tf.einsum('bkh,bkhg->bkg', c_believes_tiled, exp_obs)  # [B, n_policies, glimpse]
         if self.z_dist == 'B':
             H_exp_exp_obs = self._binary_entropy_agg(logits=exp_exp_obs)  # [B, n_policies]
         else:
@@ -58,7 +61,7 @@ class ActInfPlanner(Base):
             raise ValueError('H_exp_exp not implemented for this distribution: {}'.format(self.z_dist))
         return H_exp_exp_obs, exp_exp_obs
 
-    def calc_G_obs_prePreferences(self, exp_obs, exp_obs_sigma, c_believes):
+    def calc_G_obs_prePreferences(self, exp_obs, exp_obs_sigma, c_believes=None, c_believes_tiled=None):
         """
         Args:
             exp_obs_mu, exp_obs_sigma: [B, n_policies, hyp, glimpse]
@@ -67,9 +70,10 @@ class ActInfPlanner(Base):
             G, exp_exp_obs, exp_H, H_exp_exp_obs: [B, n_policies]
         """
         # expected entropy
-        exp_H = self._exp_H(exp_obs, exp_obs_sigma, c_believes)
+        assert (c_believes is None) or (c_believes_tiled is None)
+        exp_H = self._exp_H(exp_obs, exp_obs_sigma, c_believes, c_believes_tiled)
         # Entropy of the expectation
-        H_exp_exp_obs, exp_exp_obs = self._H_exp_exp(exp_obs, c_believes)
+        H_exp_exp_obs, exp_exp_obs = self._H_exp_exp(exp_obs, c_believes, c_believes_tiled)
         G = H_exp_exp_obs - exp_H
         return G, exp_exp_obs, exp_H, H_exp_exp_obs
 
@@ -94,12 +98,24 @@ class ActInfPlanner(Base):
         with tf.name_scope('Planning_loop/'):  # loop over policies, parallised into [B * self.n_policies, ...]
             # TODO: define inputs for policyNet (and use the same in reinforce-planner if using it for pre-training)`
             # inputs = [current_state['s'], tf.fill([self.B, 1], tf.cast(time, tf.float32))]
-            inputs = [current_state['s']] if (self.n_policies > 1) else [current_state['c'], current_state['s']]
-            policy_dep_input = self.policy_dep_input if (self.n_policies > 1) else None
-            next_actions, next_actions_mean = self.m['policyNet'].next_actions(inputs=inputs,
-                                                                               is_training=is_training,
-                                                                               n_policies=self.n_policies,
-                                                                               policy_dep_input=policy_dep_input)
+            if self.n_policies == 1:  # 'G1'
+                inputs = [current_state['c'], current_state['s']]
+            elif self.rl_reward == 'clf':
+                assert self.n_policies == self.num_classes_kn
+                inputs = [repeat_axis(current_state['s'], axis=0, repeats=self.num_classes_kn), self.policy_dep_input]
+            elif self.rl_reward == 'G':
+                assert self.n_policies == self.num_classes_kn
+                boosted_hyp = repeat_axis(current_state['c'], axis=0, repeats=self.n_policies)
+                # increase each 'hypothesis'-policy by 50%
+                boosted_hyp += self.policy_dep_input * boosted_hyp * 0.5
+                def re_normalise(x, axis=-1):
+                    return x / tf.reduce_sum(x, axis=axis)
+                boosted_hyp = re_normalise(boosted_hyp, axis=-1)
+                inputs = [repeat_axis(current_state['s'], axis=0, repeats=self.n_policies), boosted_hyp]
+            else:
+                raise ValueError('Unknown policy strategies', 'n_policies: {}, rl_reward: {}'.format(self.n_policies, self.rl_reward))
+            next_actions, next_actions_mean = self.m['policyNet'].next_actions(inputs=inputs, is_training=is_training, n_policies=self.n_policies)
+
             # action specific state transition
             new_state = self.stateTransition([z_samples, next_actions], current_state)
 

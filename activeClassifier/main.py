@@ -85,12 +85,12 @@ def training_loop(FLAGS, sess, model, handles, writers, phase):
                 writers['valid'].add_summary(out_valid.pop('summary'), global_step=out_valid.pop('step'))
                 # out_train.pop('G')
                 # print(out_valid.pop('G'))
-                stats = ['{}: {:.3f}'.format(k, v) for k, v in out_valid.items() if not hasattr(v, "__len__")]
+                stats = ['{}: {:.3f}'.format(k, v) for k, v in sorted(out_valid.items()) if not hasattr(v, "__len__")]
                 print('{}/{}, '.format(i, FLAGS.train_batches_per_epoch) + ' '.join(stats))
-                # train
-                # print(out_train.pop('G'))
-                stats = ['{}: {:.3f}'.format(k, v) for k, v in out_train.items() if not hasattr(v, "__len__")]
-                print('{}/{}, '.format(i, FLAGS.train_batches_per_epoch) + ' '.join(stats))
+                # # train
+                # # print(out_train.pop('G'))
+                # stats = ['{}: {:.3f}'.format(k, v) for k, v in sorted(out_train.items()) if not hasattr(v, "__len__")]
+                # print('{}/{}, '.format(i, FLAGS.train_batches_per_epoch) + ' '.join(stats))
             else:
                 sess.run(train_op, feed_dict=feeds['train'])
 
@@ -103,7 +103,7 @@ def training_loop(FLAGS, sess, model, handles, writers, phase):
             run_eval()
 
     if phase['final_eval']:
-        logging.info('FINISHED TRAINING, {} EPOCHS COMPLETED\n'.format(epochs_completed))
+        logging.info('FINISHED TRAINING, {} EPOCHS COMPLETED\n'.format(phase['num_epochs']))
         evaluate(FLAGS, sess, model, feeds['eval_test'],  FLAGS.batches_per_eval_test,  writers['test'], Visual)
         Visual.visualise(sess, feeds['eval_test'], suffix='_test')
 

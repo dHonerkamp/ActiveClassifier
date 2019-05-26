@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 from modules.planner.base import Base
-
+from tools.tf_tools import repeat_axis
 
 class REINFORCEPlanner(Base):
     def __init__(self, FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition, is_pre_phase, labels):
@@ -22,21 +22,13 @@ class REINFORCEPlanner(Base):
         # TODO: CHECK EFFECT ON PERFORMANCE FROM INCLUDING THIS OR NOT (WHETHER INCLUDING IT MAKES THE MODEL FOCUS LESS ON LEARNING RECONSTRUCTIONS)
         if self._is_pre_phase:
             # TODO: ADJUST FOR UK CLASSES
-            # policy_dep_input = tf.one_hot(tf.argmax(current_state['c'], axis=1),
-            #                               depth=self.num_classes_kn)[tf.newaxis, :, :]
-            policy_dep_input = tf.one_hot(self.lbls,
-                                          depth=self.num_classes_kn)[tf.newaxis, :, :]
+            # policy_dep_input = tf.one_hot(tf.argmax(current_state['c'], axis=1), depth=self.num_classes_kn)
+            policy_dep_input = tf.one_hot(self.lbls, depth=self.num_classes_kn)
             # inputs = [current_state['s'], tf.fill([self.B, 1], tf.cast(time, tf.float32))]
-            inputs = [current_state['s']]
-            next_action, next_action_mean = self.m['policyNet'].next_actions(inputs=inputs,
-                                                                             is_training=is_training,
-                                                                             n_policies=self.n_policies,
-                                                                             policy_dep_input=policy_dep_input)
+            inputs = [current_state['s'], policy_dep_input]
         else:
-            next_action, next_action_mean = self.m['policyNet'].next_actions(inputs=[current_state['c'], current_state['s']],
-                                                                             is_training=is_training,
-                                                                             n_policies=self.n_policies,
-                                                                             policy_dep_input=None)
+            inputs = [current_state['c'], current_state['s']]
+        next_action, next_action_mean = self.m['policyNet'].next_actions(inputs=inputs, is_training=is_training, n_policies=self.n_policies)
         next_exp_obs = self.single_policy_prediction(current_state, z_samples, next_action)
 
         if time < (self.num_glimpses - 1):

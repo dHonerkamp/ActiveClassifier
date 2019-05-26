@@ -6,7 +6,7 @@ class PolicyNetwork:
         self.name = name
         self.max_loc_rng = FLAGS.max_loc_rng
         self.init_loc_rng = FLAGS.init_loc_rng
-        self.batch_sz = batch_sz
+        self.B = batch_sz
         self.loc_dim = FLAGS.loc_dim
         self._units = FLAGS.num_hidden_fc
 
@@ -21,24 +21,17 @@ class PolicyNetwork:
         hidden = tf.layers.dense(inputs, self._units, activation=tf.nn.relu)
         return tf.layers.dense(hidden, self.loc_dim, activation=tf.nn.tanh)
 
-    def next_actions(self, inputs, is_training, n_policies, policy_dep_input=None):
+    def next_actions(self, inputs, is_training, n_policies):
         """
         NOTE: Does not propagate back into the inputs. Gradients for the policyNet weights only flow through the loc_mean (which should only be used in the REINFORCE_loss calculations)
-        NOTE: tf backpropagates through sampling if using tf.distributions.Normal()"""
-        if n_policies > 1:
-            assert policy_dep_input is not None
-
+        NOTE: tf by default backpropagates through sampling if using tf.distributions.Normal()
+        """
         with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
-            loc_mean = []
-            for k in range(n_policies):
-                specific_inputs = inputs.copy()
-                if policy_dep_input is not None:
-                    specific_inputs += [policy_dep_input[k]]
-                specific_inputs = tf.stop_gradient(tf.concat(specific_inputs, axis=1))
-                loc_mean.append(self.calc_encoding(specific_inputs))
-            loc_mean = tf.stack(loc_mean, axis=1)  # [B, n_policies, loc_dims]
-
+            inputs = tf.stop_gradient(tf.concat(inputs, axis=1))
+            loc_mean = self.calc_encoding(inputs)    # [B * n_policies, loc_dim]
             loc_mean = tf.clip_by_value(loc_mean, self.max_loc_rng * -1, self.max_loc_rng * 1)
+
+            loc_mean = tf.reshape(loc_mean, [self.B, n_policies, self.loc_dim]) if n_policies > 1 else tf.reshape(loc_mean, [self.B, self.loc_dim])
 
             with tf.name_scope('sample_locs'):
                 loc = tf.cond(is_training,
@@ -46,11 +39,7 @@ class PolicyNetwork:
                               lambda: tf.identity(loc_mean),
                               name='sample_loc_cond')
 
-        if n_policies == 1:
-            loc = tf.squeeze(loc, 1)
-            loc_mean = tf.squeeze(loc_mean, 1)
-
-        return loc, loc_mean  # [B, n_policies, loc_dims] or # [B, loc_dims]
+        return loc, loc_mean  # [B, n_policies, loc_dims] or [B, loc_dims]
 
     def REINFORCE_losses(self, returns, baselines, locs, loc_means):
         with tf.name_scope('loc_losses'):
@@ -70,7 +59,7 @@ class PolicyNetwork:
     def random_loc(self, rng=1.):
         rng = min(rng, self.max_loc_rng)
         with tf.name_scope(self.name):
-            loc = tf.random_uniform([self.batch_sz, self.loc_dim], minval=rng * -1.,  maxval=rng * 1.)
+            loc = tf.random_uniform([self.B, self.loc_dim], minval=rng * -1., maxval=rng * 1.)
 
         return loc, loc
 

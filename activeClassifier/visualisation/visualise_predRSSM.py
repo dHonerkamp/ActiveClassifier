@@ -251,7 +251,7 @@ class Visualization_predRSSM(Base):
                     if np.sum(d['H_exp_exp_obs'][t, i, :]) == 0.:
                         break
 
-        [(ax.set_xticks([]), ax.set_yticks([]), ax.set_axis_off())  for ax in axes.ravel()]
+        [(ax.set_xticks([]), ax.set_yticks([]))  for ax in axes.ravel()]
         self._save_fig(f, folder_name, '{}{}.png'.format(self.prefix, suffix))
 
     def plot_fb(self, d, suffix=''):

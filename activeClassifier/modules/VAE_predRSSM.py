@@ -52,8 +52,8 @@ class Encoder:
                 mu = tf.identity(mu)
         return mu
 
-    def _prior(self, c, s, l):
-        inputs = tf.concat([c, s, l], axis=1)
+    def _prior(self, inputs, out_shp=None):
+        inputs = tf.concat(inputs, axis=1)
         hidden = tf.layers.dense(inputs, **self._kwargs)
         mu = tf.layers.dense(hidden, self.size_z, None)
 
@@ -68,10 +68,13 @@ class Encoder:
 
         sample, log_sample = self._sample(mu, sigma, temp=self.temp_prior)
 
-        return {'mu': mu,
-                'sigma': sigma,
-                'sample': sample,
-                'log_sample': log_sample}
+        out = {'mu': mu,
+               'sigma': sigma,
+               'sample': sample,
+               'log_sample': log_sample}
+        if out_shp is not None:
+            out = {k: tf.reshape(v, out_shp) if (v is not None) else None for k, v in out.items()}
+        return out
 
     def _posterior(self, glimpse, l):
         if self.use_conv:

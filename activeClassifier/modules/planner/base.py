@@ -38,15 +38,13 @@ class Base:
         if z_samples is not None:
             state = self.stateTransition([z_samples, next_actions], state)
 
-        hyp = self._hyp_tiling(n_classes=self.num_classes_kn, n_tiles=self.B * 1)  # [B * 1 * n_classes_kn, n_classes_k]
+        hyp = self._hyp_tiling(n_classes=self.num_classes_kn, n_tiles=self.B * 1)  # [B * 1 * n_classes_kn, n_classes_kn]
         new_s_tiled = repeat_axis(state['s'], axis=0, repeats=self.num_classes_kn)  # [B, rnn] -> [B * hyp, rnn]
         new_l_tiled = repeat_axis(state['l'], axis=0, repeats=self.num_classes_kn)  # [B, loc] -> [B * hyp, loc]
 
-        exp_obs = self.m['VAEEncoder'].calc_prior(hyp,
-                                                  new_s_tiled,
-                                                  new_l_tiled)
+        exp_obs = self.m['VAEEncoder'].calc_prior([hyp, new_s_tiled, new_l_tiled], out_shp=[self.B, self.num_classes_kn, self.m['VAEEncoder'].output_size])
 
-        return {k: tf.reshape(v, [self.B, self.num_classes_kn, v.shape[-1]]) if (v is not None) else None for k, v in exp_obs.items()}
+        return exp_obs
 
     def initial_planning(self):
         selected_action, selected_action_mean = self.m['policyNet'].inital_loc()

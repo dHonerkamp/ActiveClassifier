@@ -54,6 +54,7 @@ class ActInfPlanner(Base):
             exp_exp_obs = tf.einsum('bh,bkhg->bkg', c_believes, exp_obs)  # [B, n_policies, glimpse]
         else:
             exp_exp_obs = tf.einsum('bkh,bkhg->bkg', c_believes_tiled, exp_obs)  # [B, n_policies, glimpse]
+
         if self.z_dist == 'B':
             H_exp_exp_obs = self._binary_entropy_agg(logits=exp_exp_obs)  # [B, n_policies]
         else:
@@ -116,14 +117,14 @@ class ActInfPlanner(Base):
         if self.n_policies == 1:
             selected_action, selected_action_mean = next_actions, next_actions_mean
             selected_exp_obs = {k: tf.reshape(v, [self.B, self.num_classes_kn, v.shape[-1]]) if (v is not None) else None
-                                for k, v in exp_obs_prior.items()}
+                                for k, v in exp_obs_prior.items()}  # squeeze out policy dim (squeeze would turn shape into unknown)
         else:
             coords = tf.stack(tf.meshgrid(tf.range(self.B)) + [selected_action_idx], axis=1)
             selected_action      = tf.gather_nd(next_actions, coords)
             selected_action_mean = tf.gather_nd(next_actions_mean, coords)
-            selected_exp_obs     = {k: tf.gather_nd(tf.reshape(v, [self.B, self.n_policies, self.num_classes_kn, v.shape[-1]]), coords) if (v is not None) else None
-                                    for k, v in exp_obs_prior.items()}  # -> [B, num_classes_kn, -1] as n_policies get removed in gather_nd
+            selected_exp_obs     = {k: tf.gather_nd(v, coords) if (v is not None) else None for k, v in exp_obs_prior.items()}  # [B, num_classes_kn, -1] as n_policies get removed in gather_nd
         return decision, selected_action, selected_action_mean, selected_exp_obs
+
 
     def planning_step(self, current_state, z_samples, time, is_training):
         """Perform one planning step.
@@ -163,13 +164,10 @@ class ActInfPlanner(Base):
                 new_l_tiled = repeat_axis(tf.reshape(new_state['l'], [self.B * self.n_policies, self.loc_dim]),
                                           axis=0, repeats=self.num_classes_kn)  # [B, n_policies, loc] -> [B * n_policies, loc] -> [B * n_policies * hyp, loc]
 
-                exp_obs_prior = self.m['VAEEncoder'].calc_prior(self.hyp,
-                                                                new_s_tiled,
-                                                                new_l_tiled)
-                exp_obs = tf.reshape(exp_obs_prior['mu'], [self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size])  # [B, n_policies, hyp, glimpse]
-                exp_obs_sigma = tf.reshape(exp_obs_prior['sigma'], [self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size]) if exp_obs_prior['sigma'] else exp_obs_prior['sigma']
+                exp_obs_prior = self.m['VAEEncoder'].calc_prior([self.hyp, new_s_tiled, new_l_tiled],
+                                                                out_shp=[self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size])
 
-            G_obs, exp_exp_obs, exp_H, H_exp_exp_obs = self.calc_G_obs_prePreferences(exp_obs, exp_obs_sigma, new_state['c'])
+            G_obs, exp_exp_obs, exp_H, H_exp_exp_obs = self.calc_G_obs_prePreferences(exp_obs_prior['mu'], exp_obs_prior['sigma'], new_state['c'])
             # For all non-decision actions the probability of classifying is 0, hence the probability of an observation is 1
             preference_error_obs = 1. * self.C[time, 0]
             G_obs += preference_error_obs
@@ -182,8 +180,8 @@ class ActInfPlanner(Base):
             decision, selected_action, selected_action_mean, selected_exp_obs = self._action_selection(next_actions, next_actions_mean, new_state, G, exp_obs_prior, time, is_training)
 
         records = {'G'                : G,
-                   'exp_obs'          : exp_obs,  # [B, n_policies, num_classes, -1]
-                   'exp_exp_obs'      : exp_exp_obs,  # [B, n_policies, -1]
+                   'exp_obs'          : exp_obs_prior['mu'],  # [B, n_policies, num_classes, z]
+                   'exp_exp_obs'      : exp_exp_obs,  # [B, n_policies, z]
                    'H_exp_exp_obs'    : H_exp_exp_obs,
                    'exp_H'            : exp_H,
                    'potential_actions': next_actions[:, tf.newaxis, :] if (self.n_policies == 1) else next_actions}

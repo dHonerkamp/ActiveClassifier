@@ -71,7 +71,7 @@ class Utility(object):
         if FLAGS.use_conv:
             experiment_name += '_CNN'
         if FLAGS.planner == 'ActInf':
-            experiment_name += '_c{}a{}p{}'.format(FLAGS.prior_preference_c, FLAGS.precision_alpha, FLAGS.prior_preference_glimpses)
+            experiment_name += '_c{}a{}p{}rl{}'.format(FLAGS.prior_preference_c, FLAGS.precision_alpha, FLAGS.prior_preference_glimpses, FLAGS.rl_reward)
         if FLAGS.uk_folds:
             experiment_name += '_ukTr{}Te{}U{}Cy{}'.format(FLAGS.num_uk_train, FLAGS.num_uk_test, FLAGS.num_uk_test_used, FLAGS.uk_cycling)
         if FLAGS.binarize_MNIST:
@@ -148,7 +148,7 @@ class Utility(object):
         parser.add_argument('--precision_alpha', type=int, default=1, help='Precision constant. Visual foraging_demo: 512')
         parser.add_argument('--size_z', type=int, default=32, help='Dimensionality of the hidden states z.')
         parser.add_argument('--z_dist', type=str, default='B', choices=['N', 'B'], help='Distributions of the hidden state. N: normal, B: bernoulli.')
-        parser.add_argument('--z_B_kl', type=int, default=22, choices=[20, 21, 22], help='Bernoulli latent code only: type of KL divergence. Corresponds to equations in https://arxiv.org/abs/1611.00712.')
+        parser.add_argument('--z_B_kl', type=int, default=22, choices=[20, 21, 22, 212], help='Bernoulli latent code only: type of KL divergence. Corresponds to equations in https://arxiv.org/abs/1611.00712.')
         parser.add_argument('--z_kl_weight', type=float, default=1., help='Weighting the kl term up or down.')
         parser.add_argument('--z_B_center', type=int, default=0, choices=[0, 1], help='Bernoulli latent code only: center the logits.')
         parser.add_argument('--num_hidden_fc', type=int, default=512, help='Standard size of fully connected layers.')

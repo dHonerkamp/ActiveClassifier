@@ -86,15 +86,24 @@ class BeliefUpdate:
             dist_post = tfd.Normal(loc=post_mu, scale=post_sigma)
             KLdiv = dist_post.kl_divergence(dist_prior)  # [B, hyp, z]
         elif self.z_dist == 'B':
-            if self.z_B_kl in [20, 21]:
+            if self.z_B_kl in [20, 212]:
                 # Monte carlo approximation on the logistic node (a true lower bound but can exhibit higher variance)
                 post_log_sample = tf.tile(z_post['log_sample'][:, tf.newaxis, :], [1, self.num_classes_kn, 1])
                 dist_prior = pseudo_LogRelaxedBernoulli(logits=z_prior['mu'], temperature=self.m['VAEEncoder'].temp_prior)
                 dist_post  = pseudo_LogRelaxedBernoulli(logits=post_mu, temperature=self.m['VAEEncoder'].temp_post)
                 KLdiv = dist_post.log_prob(post_log_sample) - dist_prior.log_prob(post_log_sample)  # [B, hyp, z]
-                if self.z_B_kl == 21:
+                if self.z_B_kl == 212:
                     # slightly different relaxation from equation 21, but seemed to learn quite well
                     KLdiv *= dist_post.prob(post_log_sample)
+            elif self.z_B_kl == 21:
+                # relax computation of the discrete log mass: not a true lower bound, be aware of overfitting on spurious elements in this 'KL'
+                def pseudo_kl(a_logits, b_logits, z_logits):
+                    """Bernoulli-kl with 'external' labels given by z_logits"""
+                    delta_probs0 = tf.nn.softplus(-b_logits) - tf.nn.softplus(-a_logits)
+                    delta_probs1 = tf.nn.softplus(b_logits) - tf.nn.softplus(a_logits)
+                    return (tf.nn.sigmoid(z_logits) * delta_probs0 + tf.nn.sigmoid(-z_logits) * delta_probs1)
+                post_log_sample = tf.tile(z_post['log_sample'][:, tf.newaxis, :], [1, self.num_classes_kn, 1])
+                KLdiv = pseudo_kl(post_mu, z_prior['mu'], z_logits=post_log_sample)
             elif self.z_B_kl == 22:
                 # replace discrete mass with the analytic discrete KL: not a true lower bound, be aware of overfitting on spurious elements in this 'KL'
                 dist_prior = tfd.Bernoulli(logits=z_prior['mu'])
@@ -130,7 +139,7 @@ class PredErrorUpdate(BeliefUpdate):
 
     def update_fn(self, current_state, predError, time, newly_done):
         # c = expanding_mean(tf.nn.softmax(-predError, axis=1), current_state['c'], time)
-        c = tf.nn.softmax(-current_state['fb'] / (time+1), axis=1)
+        c = tf.nn.softmax(1 * -current_state['fb'] / (time+1), axis=1)
 
         if self.uk_label is not None:
             avg_fb = current_state['fb'] / tf.cast((time + 1), tf.float32)

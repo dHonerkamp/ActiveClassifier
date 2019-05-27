@@ -26,7 +26,7 @@ class RepeatsTest(tf.test.TestCase):
     def test_repeat_axis(self):
         x = np.random.rand(10, 10)
 
-        x1 = np.repeat(x, repeats=3, axis=1)
+        x1 = np.repeat(x, repeats=5, axis=1)
         x2 = repeat_axis(tf.constant(x), axis=1, repeats=5)
 
         with self.test_session():

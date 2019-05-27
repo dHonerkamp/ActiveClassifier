@@ -12,6 +12,18 @@ def softmax(x):
     return e_x / e_x.sum(axis=0)
 
 
+def visualisation_level(level):
+    """Minimum visualisation level at which the function is executed"""
+    def decorator(func):
+        def func_wrapper(self, *args, **kwargs):
+            if self.visualisation_level >= level:
+                return func(self, *args, **kwargs)
+            else:
+                return
+        return func_wrapper
+    return decorator
+
+
 class Base:
     def __init__(self, model, FLAGS):
         self.path = FLAGS.path
@@ -65,10 +77,14 @@ class Base:
         if 'potential_actions' in d.keys():
             d['potential_actions'] = self._adjust_loc(d['potential_actions'])
 
+        # set figure name prefix
+        self.prefix = 's{}_e{}_ph{}'.format(d['step'], d['epoch'], d['phase'])
+
         # update num_glimpses as it might be dynamic
         self.num_glimpses, self.batch_size_eff = d['locs'].shape[0], d['locs'].shape[1]
         return d
 
+    @visualisation_level(1)
     def plot_overview(self, d, nr_examples, suffix=''):
         f, axes = plt.subplots(nr_examples, self.num_glimpses + 1, figsize=(6 * self.num_glimpses, 5 * nr_examples))
         axes    = axes.reshape([nr_examples, self.num_glimpses + 1])
@@ -140,6 +156,10 @@ class Base:
         ax.imshow(img_seen, cmap=cmap)
 
     def _save_fig(self, f, folder_name, name):
+        path = os.path.join(self.path, folder_name)
+        if not os.path.exists(path):
+            os.mkdir(path)
+
         f.tight_layout()
-        f.savefig(os.path.join(self.path, folder_name, name), bbox_inches='tight')
+        f.savefig(os.path.join(path, name), bbox_inches='tight')
         plt.close(f)

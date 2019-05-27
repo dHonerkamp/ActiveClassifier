@@ -5,7 +5,7 @@ matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 
-from visualisation.base import Base
+from visualisation.base import Base, visualisation_level
 
 def softmax(x):
     """Compute softmax values for each sets of scores in x."""
@@ -38,51 +38,32 @@ class Visualization_predRSSM(Base):
                       'potential_actions': model.potential_actions,
                       'H_exp_exp_obs'   : model.H_exp_exp_obs,
                       'exp_H'           : model.exp_H,
+                      'exp_exp_obs'     : model.exp_exp_obs,
+                      'selected_exp_obs': model.selected_exp_obs,
+                      'z_post'          : model.z_post,
+                      'selected_action_idx': model.selected_action_idx,
                       }
 
-        if self.visualisation_level > 0:
-            folders = ['glimpses', 'fb']
-
-            if self.visualisation_level > 1:
-                folders.append('reconstr')
-                folders.append('c')
-
-                if (self.planner == 'ActInf'):
-                    # folders.append('planning')
-                    folders.append('planning_patches')
-            #
-            #         self.fetch.update({'exp_exp_obs' : model.exp_exp_obs,
-            #                            'exp_obs': model.exp_obs,
-            #                            'H_exp_exp_obs' : model.H_exp_exp_obs,
-            #                            'exp_H' : model.exp_H,
-            #                            'potential_actions' : model.potential_actions,})
-
-            for f in folders:
-                os.makedirs(os.path.join(FLAGS.path, f), exist_ok=True)
-
+    @visualisation_level(1)
     def visualise(self, sess, feed, suffix='', nr_obs_overview=8, nr_obs_reconstr=5):
-        if self.visualisation_level > 0:
-            d = self._eval_feed(sess, feed)
+        d = self._eval_feed(sess, feed)
 
-            nr_obs_overview = min(nr_obs_overview, self.batch_size_eff)  # batch_size_eff is set in _eval_feed() -> has to come before
-            nr_obs_reconstr = min(nr_obs_reconstr, self.batch_size_eff)
+        nr_obs_overview = min(nr_obs_overview, self.batch_size_eff)  # batch_size_eff is set in _eval_feed() -> has to come before
+        nr_obs_reconstr = min(nr_obs_reconstr, self.batch_size_eff)
 
-            self.prefix = 's{}_e{}_ph{}'.format(d['step'], d['epoch'], d['phase'])
-            self.plot_overview(d, nr_obs_overview, suffix)
+        self.plot_overview(d, nr_obs_overview, suffix)
 
-            if self.visualisation_level > 1:
-                self.plot_stateBelieves(d, suffix)
-                self.plot_reconstr(d, nr_obs_reconstr, suffix)
+        self.plot_stateBelieves(d, suffix)
+        self.plot_reconstr(d, nr_obs_reconstr, suffix)
 
-            #     self.plot_fb(d, prefix)
-                if (self.planner == 'ActInf') & (d['epoch'] >= self.pre_train_epochs):
-                    # self.plot_planning(d, nr_examples=nr_obs_reconstr)
-                    self.plot_planning_patches(d, nr_examples=nr_obs_reconstr)
+    #     self.plot_fb(d, prefix)
+        if (self.planner == 'ActInf') & (d['epoch'] >= self.pre_train_epochs):
+            # self.plot_planning(d, nr_examples=nr_obs_reconstr)
+            self.plot_planning_patches(d, nr_examples=nr_obs_reconstr)
+            self.plot_z(d, 3, suffix)
 
+    @visualisation_level(1)
     def plot_reconstr(self, d, nr_examples, suffix='', folder_name='reconstr'):
-        if self.visualisation_level < 1:
-            return
-
         def get_title_color(post_believes, hyp):
             if post_believes[hyp] == post_believes.max():
                 color = 'magenta'
@@ -121,15 +102,16 @@ class Visualization_predRSSM(Base):
                 for j, hyp in enumerate(ranked_losses):
                     axes[t+1, j+2].imshow(gl_preds[t, i, hyp], cmap='gray')
                     if d['decisions'][t, i] != -1:
-                        axes[t, j + 2].set_title('Decision: {}'.format(d['decisions'][t, i]))
+                        axes[t+1, j + 2].set_title('Decision: {}'.format(d['decisions'][t, i]))
                     else:
                         c = get_title_color(d['state_believes'][t+1, i, :], hyp)
-                        axes[t+1, j+2].set_title('{}, p: {:.2f}, KL: {:.2f}, post-c: {:.2f}'.format(self.lbl_map[hyp], ps[hyp], d['KLdivs'][t, i, hyp], d['state_believes'][t+1, i, hyp]), color=c)
+                        axes[t+1, j + 2].set_title('{}, p: {:.2f}, KL: {:.2f}, post-c: {:.2f}'.format(self.lbl_map[hyp], ps[hyp], d['KLdivs'][t, i, hyp], d['state_believes'][t+1, i, hyp]), color=c)
 
             [ax.set_axis_off() for ax in axes.ravel()]
             self._save_fig(f, folder_name, '{}{}_n{}{isuk}.png'.format(self.prefix, suffix, i,
                                                                        isuk='_uk' if (d['y'][i] == self.uk_label) else ''))
 
+    # @visualisation_level(2)
     # def plot_planning(self, d, nr_examples, suffix='', folder_name='planning'):
     #     # T x [True glimpse, exp_exp_obs, exp_obs...]
     #     nax_x = self.num_policies
@@ -163,6 +145,7 @@ class Visualization_predRSSM(Base):
     #         [ax.set_axis_off() for ax in axes.ravel()]
     #         self._save_fig(f, folder_name, '{}{}_n{}.png'.format(self.prefix, suffix, i))
 
+    @visualisation_level(2)
     def plot_planning(self, d, nr_examples, suffix='', folder_name='planning'):
         # T x [True glimpse, exp_exp_obs, exp_obs...]
         nax_x = nr_examples
@@ -206,8 +189,8 @@ class Visualization_predRSSM(Base):
         [ax.set_axis_off() for ax in axes.ravel()]
         self._save_fig(f, folder_name, '{}{}.png'.format(self.prefix, suffix))
 
+    @visualisation_level(2)
     def plot_planning_patches(self, d, nr_examples, suffix='', folder_name='planning_patches'):
-        # T x [True glimpse, exp_exp_obs, exp_obs...]
         nax_x = nr_examples
         nax_y = self.num_glimpses
 
@@ -221,6 +204,12 @@ class Visualization_predRSSM(Base):
                 else:
                     # plot patches seen until now
                     self._plot_seen(d['x'][i], d['locs'][:, i], until_t=t, ax=axes[t, i])
+
+                    # add current believes to legend
+                    ranked_believes = np.argsort(- d['state_believes'][t, i, :])
+                    lbl = 'hyp: ' + ', '.join('{} ({:.2f})'.format(j,  d['state_believes'][t, i, j]) for j in ranked_believes[:5])
+                    axes[t, i].scatter(0, 0, marker='x', linewidth=0, s=0, label=lbl)
+
                     if np.sum(d['H_exp_exp_obs'][t, i, :]) == 0.:
                         axes[t, i].set_title('t: {}, decision - no new glimpse'.format(t))
                     else:
@@ -233,16 +222,13 @@ class Visualization_predRSSM(Base):
                             color = 'C{}'.format(k)
                             correct = np.all((locs == d['locs'][t, i, :]))
 
-                            lbl = '{}: G: {:.2f}, H_: {:.2f}, exp_H: {:.2f}, G_dec: {:.2f}'.format(k, d['G'][t, i, k], d['H_exp_exp_obs'][t, i, k], d['exp_H'][t, i, k], d['G'][t, i, -1])
+                            lbl = '{}: G: {:.2f}, H(exp): {:.2f}, E(H): {:.2f}, G_dec: {:.2f}'.format(k, d['G'][t, i, k], d['H_exp_exp_obs'][t, i, k], d['exp_H'][t, i, k], d['G'][t, i, -1])
                             axes[t, i].add_patch(Rectangle(locs[::-1] - self.scale_sizes[0] / 2,
                                                                width=self.scale_sizes[0], height=self.scale_sizes[0],
                                                                edgecolor=color, facecolor='none', linewidth=1.5, label=lbl))
                             if correct:
                                 axes[t, i].scatter(locs[1], locs[0], marker='x', facecolors=color, linewidth=1.5, s=0.25 * (5 * 8 * 24))
-                    # add current believes to legend
-                    ranked_believes = np.argsort(- d['state_believes'][t, i, :])
-                    lbl = 'hyp: ' + ', '.join('{} ({:.2f})'.format(j,  d['state_believes'][t, i, j]) for j in ranked_believes[:5])
-                    axes[t, i].scatter(0, 0, marker='x', linewidth=0, s=0, label=lbl)
+
                     # place legend next to plot
                     chartBox = axes[t, i].get_position()
                     axes[t, i].set_position([chartBox.x0, chartBox.y0, chartBox.width * 0.6, chartBox.height])
@@ -251,9 +237,55 @@ class Visualization_predRSSM(Base):
                     if np.sum(d['H_exp_exp_obs'][t, i, :]) == 0.:
                         break
 
-        [(ax.set_xticks([]), ax.set_yticks([]))  for ax in axes.ravel()]
+        [(ax.set_xticks([]), ax.set_yticks([]), ax.set_ylim([self.img_shape[0] - 1, 0]), ax.set_xlim([0, self.img_shape[1] - 1]))  for ax in axes.ravel()]
         self._save_fig(f, folder_name, '{}{}.png'.format(self.prefix, suffix))
 
+    @visualisation_level(2)
+    def plot_z(self, d, nr_examples, suffix='', folder_name='z'):
+        # T x [True glimpse, posterior, exp_exp_obs, exp_obs...]
+        nax_x = 3 + self.num_classes_kn
+        nax_y = self.num_glimpses
+
+        gl = self._scale_reshp(d['glimpse'])  # [T, B, scale[0], scales*scale[0]]
+        if self.size_z == 10:
+            shp = [5, 2]
+        elif self.size_z == 32:
+            shp = [8, 4]
+        elif self.size_z == 128:
+            shp = [16, 8]
+        else:
+            shp = 2 * [int(np.sqrt(self.size_z))]
+            if np.prod(shp) != self.size_z:
+                print('Unspecified shape for this size_z and plot_z. Skipping z plots.')
+                return
+        z_post =  np.reshape(d['z_post'], [self.num_glimpses, self.batch_size_eff] + shp)
+        exp_exp_obs = np.reshape(d['exp_exp_obs'], [self.num_glimpses, self.batch_size_eff, self.num_policies] + shp)
+        exp_obs_prior = np.reshape(d['selected_exp_obs'], [self.num_glimpses, self.batch_size_eff, self.num_classes_kn] + shp)
+
+        for i in range(nr_examples):
+            f, axes = plt.subplots(nax_y, nax_x, figsize=(4 * self.num_scales * nax_x, 4 * nax_y), squeeze=False)
+            for t in range(self.num_glimpses):
+                if t == 0:
+                    self._plot_img_plus_locs(axes[t, 0], d['x'][i], d['y'][i], d['clf'][i], d['locs'][:, i, :], d['decisions'][:, i])
+                else:
+                    axes[t, 0].imshow(gl[t, i], cmap='gray')
+                    axes[t, 0].set_title('t: {}'.format(t))
+
+                    axes[t, 1].imshow(z_post[t, i], cmap='gray')
+                    axes[t, 1].set_title('z_post')
+
+                    p = d['selected_action_idx'][t, i]
+                    axes[t, 2].imshow(exp_exp_obs[t, i, p], cmap='gray')
+                    axes[t, 2].set_title('H(exp) policy0: {:.2f}'.format(d['H_exp_exp_obs'][t, i, p]))
+
+                    for k in range(self.num_classes_kn):
+                        axes[t, 3 + k].imshow(exp_obs_prior[t, i, k], cmap='gray')
+                        axes[t, 3 + k].set_title('k: {}'.format(k))
+
+            [ax.set_axis_off() for ax in axes.ravel()]
+            self._save_fig(f, folder_name, '{}{}_n{}.png'.format(self.prefix, suffix, i))
+
+    @visualisation_level(2)
     def plot_fb(self, d, suffix=''):
         def fb_hist(fb1, fb2, ax, title, add_legend):
             """fb1, fb2: tuple of (values, legend)"""
@@ -305,6 +337,7 @@ class Visualization_predRSSM(Base):
 
         self._save_fig(f, 'fb', '{}{}.png'.format(self.prefix, suffix))
 
+    @visualisation_level(2)
     def plot_stateBelieves(self, d, suffix):
         # TODO: INCLUDE uk_belief and plots differentiating by known/uk
         if self.visualisation_level < 2:

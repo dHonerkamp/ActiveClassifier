@@ -1,12 +1,14 @@
 import os.path
+import sys
 import logging
 import time
 import pickle
 import tensorflow as tf
 from sklearn.metrics import f1_score
+from multiprocessing import Process
 
 from env.env import ImageForagingEnvironment
-from tools.utility import Utility
+from tools.utility import Utility, Proc_Queue
 from env.get_data import get_data, random_uk_selection
 from models.predRSSM import predRSSM
 from visualisation.visualise_predRSSM import Visualization_predRSSM
@@ -19,7 +21,11 @@ import numpy as np
 np.set_printoptions(precision=2)
 
 
-def evaluate(FLAGS, sess, model, feed, num_batches, writer, visual=None):
+def batch_plotting(visual, batch_values, sfx):
+    visual.plot_fb(batch_values, sfx)
+    visual.plot_stateBelieves(batch_values, sfx)
+
+def evaluate(FLAGS, sess, model, feed, num_batches, writer, visual=None, proc_queue=None):
     fetch = {'summary'            : model.summary,
              'step'               : model.global_step,
              'metrics'            : model.metrics_update,
@@ -47,8 +53,10 @@ def evaluate(FLAGS, sess, model, feed, num_batches, writer, visual=None):
     if visual is not None:
         batch_values['y'] = batch_values['y_MC']
         sfx = '_' + writer.get_logdir().split('/')[-1]
-        visual.plot_fb(batch_values, suffix=sfx)
-        visual.plot_stateBelieves(batch_values, suffix=sfx)
+        if proc_queue is not None:
+            proc_queue.add_proc(Process(target=batch_plotting, args=(visual, batch_values, sfx)))
+        else:
+            batch_plotting(visual, batch_values, sfx)
 
     prefix = writer.get_logdir().split('/')[-1].upper() + ':'
     strs = [item for pair in sorted(zip(model.metrics_names, out["metrics"])) for item in pair] + ['f1', f1]
@@ -56,20 +64,34 @@ def evaluate(FLAGS, sess, model, feed, num_batches, writer, visual=None):
     logging.info(s.format(*strs))
 
 
-def training_loop(FLAGS, sess, model, handles, writers, phase):
-    def run_eval():
-        # Visual.visualise(sess, eval_feed_train, suffix='_train')
-        Visual.visualise(sess, feeds['eval_valid'], suffix='_valid')
-        evaluate(FLAGS, sess, model, feeds['eval_train'], FLAGS.batches_per_eval_valid, writers['train'])
-        evaluate(FLAGS, sess, model, feeds['eval_valid'], FLAGS.batches_per_eval_valid, writers['valid'], Visual)
-        if FLAGS.uk_label:  # just to faster sense if it generalises to UU or not
-            evaluate(FLAGS, sess, model, feeds['eval_test'], FLAGS.batches_per_eval_test, writers['test'], Visual)
+def run_eval(FLAGS, sess, feeds, model, writers, visual, proc_queue):
+    # d = visual.eval_feed(sess, feeds['eval_train'], model)
+    # Visual.visualise(d, suffix='_train')
+    d = visual.eval_feed(sess, feeds['eval_valid'], model)
+    proc_queue.add_proc(Process(target=visual.visualise, args=(d, '_valid')))
 
+    evaluate(FLAGS, sess, model, feeds['eval_train'], FLAGS.batches_per_eval_valid, writers['train'], visual, proc_queue)
+    evaluate(FLAGS, sess, model, feeds['eval_valid'], FLAGS.batches_per_eval_valid, writers['valid'], visual, proc_queue)
+    if FLAGS.uk_label:  # just to faster sense if it generalises to UU or not
+        evaluate(FLAGS, sess, model, feeds['eval_test'], FLAGS.batches_per_eval_test, writers['test'], visual, proc_queue)
+
+
+def intermed_plots(sess, feeds, model, visual, proc_queue):
+    tmp_feed = feeds['eval_valid'].copy()
+    tmp_feed[model.rnd_loc_eval] = True
+    d = visual.eval_feed(sess, feed=tmp_feed, model=model)
+    proc_queue.add_proc(Process(target=visual.plot_planning_patches, args=(d, 2, '', 'rnd_loc_eval')))
+
+
+def training_loop(FLAGS, sess, model, handles, writers, phase):
     feeds = model.get_feeds(FLAGS, handles)
-    Visual = Visualization_predRSSM(model, FLAGS)
+    visual = Visualization_predRSSM(model, FLAGS)
+
+    max_processes = 1 if (sys.platform == 'win32') else 4
+    proc_queue = Proc_Queue(max_len=max_processes)
 
     if sess.run(model.global_step) == 0:
-        run_eval()
+        run_eval(FLAGS, sess, feeds, model, writers, visual, proc_queue)
 
     for epochs_completed in range(phase['num_epochs']):
         # training
@@ -91,6 +113,9 @@ def training_loop(FLAGS, sess, model, handles, writers, phase):
                 # # print(out_train.pop('G'))
                 # stats = ['{}: {:.3f}'.format(k, v) for k, v in sorted(out_train.items()) if not hasattr(v, "__len__")]
                 # print('{}/{}, '.format(i, FLAGS.train_batches_per_epoch) + ' '.join(stats))
+
+                if (FLAGS.planner == 'ActInf'):
+                    intermed_plots(sess, feeds, model, visual, proc_queue)
             else:
                 sess.run(train_op, feed_dict=feeds['train'])
 
@@ -100,13 +125,15 @@ def training_loop(FLAGS, sess, model, handles, writers, phase):
                                                                                       train_op.name))
         # evaluation
         if (epochs_completed % FLAGS.eval_step_interval) == 0:
-            run_eval()
+            run_eval(FLAGS, sess, feeds, model, writers, visual, proc_queue)
 
     if phase['final_eval']:
         logging.info('FINISHED TRAINING, {} EPOCHS COMPLETED\n'.format(phase['num_epochs']))
-        evaluate(FLAGS, sess, model, feeds['eval_test'],  FLAGS.batches_per_eval_test,  writers['test'], Visual)
-        Visual.visualise(sess, feeds['eval_test'], suffix='_test')
+        evaluate(FLAGS, sess, model, feeds['eval_test'],  FLAGS.batches_per_eval_test,  writers['test'], visual, proc_queue)
+        d = visual.eval_feed(sess, feeds['eval_test'], model)
+        visual.visualise(d, suffix='_test')
 
+    proc_queue.cleanup()
 
 def main():
     FLAGS, config = Utility.init()

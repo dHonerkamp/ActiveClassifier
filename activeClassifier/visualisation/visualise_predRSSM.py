@@ -1,4 +1,3 @@
-import os
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
@@ -6,53 +5,19 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 
 from visualisation.base import Base, visualisation_level
-
-def softmax(x):
-    """Compute softmax values for each sets of scores in x."""
-    e_x = np.exp(x - np.max(x))
-    return e_x / e_x.sum(axis=0)
+from tools.utility import softmax
 
 
 class Visualization_predRSSM(Base):
     def __init__(self, model, FLAGS):
         super().__init__(model, FLAGS)
 
-        self.fetch = {'step'            : model.global_step,
-                      'epoch'           : model.epoch_num,
-                      'phase'           : model.phase,
-                      'x'               : model.x_MC,
-                      'y'               : model.y_MC,
-                      'locs'            : model.actions,
-                      'gl_composed'     : model.glimpses_composed,
-                      'clf'             : model.classification,
-                      'decisions'       : model.decisions,
-                      'state_believes'  : model.state_believes,
-                      'G'               : model.G,
-                      'nll_posterior'   : model.nll_posterior,
-                      'glimpse'         : model.obs,
-                      'reconstr_posterior': model.reconstr_posterior,
-                      'reconstr_prior'  : model.reconstr_prior,
-                      'KLdivs'          : model.KLdivs,
-                      'fb'              : model.fb,
-                      'uk_belief'       : model.uk_belief,
-                      'potential_actions': model.potential_actions,
-                      'H_exp_exp_obs'   : model.H_exp_exp_obs,
-                      'exp_H'           : model.exp_H,
-                      'exp_exp_obs'     : model.exp_exp_obs,
-                      'selected_exp_obs': model.selected_exp_obs,
-                      'z_post'          : model.z_post,
-                      'selected_action_idx': model.selected_action_idx,
-                      }
-
     @visualisation_level(1)
-    def visualise(self, sess, feed, suffix='', nr_obs_overview=8, nr_obs_reconstr=5):
-        d = self._eval_feed(sess, feed)
-
+    def visualise(self, d, suffix='', nr_obs_overview=8, nr_obs_reconstr=5):
         nr_obs_overview = min(nr_obs_overview, self.batch_size_eff)  # batch_size_eff is set in _eval_feed() -> has to come before
         nr_obs_reconstr = min(nr_obs_reconstr, self.batch_size_eff)
 
         self.plot_overview(d, nr_obs_overview, suffix)
-
         self.plot_stateBelieves(d, suffix)
         self.plot_reconstr(d, nr_obs_reconstr, suffix)
 
@@ -340,8 +305,6 @@ class Visualization_predRSSM(Base):
     @visualisation_level(2)
     def plot_stateBelieves(self, d, suffix):
         # TODO: INCLUDE uk_belief and plots differentiating by known/uk
-        if self.visualisation_level < 2:
-            return
 
         ntax = self.num_glimpses
         bins = 40

@@ -8,6 +8,14 @@ import argparse
 import random as rn
 import tensorflow as tf
 import numpy as np
+from collections import deque
+from multiprocessing import Process
+
+
+def softmax(x):
+    """Compute softmax values for each sets of scores in x."""
+    e_x = np.exp(x - np.max(x))
+    return e_x / e_x.sum(axis=0)
 
 
 class Utility(object):
@@ -65,13 +73,13 @@ class Utility(object):
     def set_exp_name(FLAGS):
         experiment_name  = '{}gl_{}_{}_bs{}_MC{}_'.format(FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples)
         experiment_name += 'lr{}dc{}_'.format(FLAGS.learning_rate, FLAGS.learning_rate_decay_factor)
-        experiment_name += '{}sc{}_lstd{}min{}initRng{}_glstd{}_'.format(len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.loc_std, FLAGS.loc_std_min, FLAGS.init_loc_rng, FLAGS.gl_std)
+        experiment_name += '{}sc{}_lstd{}to{}Rng{}_glstd{}_'.format(len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.loc_std, FLAGS.loc_std_min, FLAGS.init_loc_rng, FLAGS.gl_std)
         experiment_name += 'preTr{}{}uk{}_'.format(FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk) if FLAGS.pre_train_epochs else ''
         experiment_name += 'z{sz}{d}{kl}C{c}w{w}_fbN{n}'.format(sz=FLAGS.size_z, d=FLAGS.z_dist, kl=FLAGS.z_B_kl, c=FLAGS.z_B_center, w=FLAGS.z_kl_weight, n=FLAGS.normalise_fb)
         if FLAGS.use_conv:
             experiment_name += '_CNN'
         if FLAGS.planner == 'ActInf':
-            experiment_name += '_c{}a{}p{}rl{}'.format(FLAGS.prior_preference_c, FLAGS.precision_alpha, FLAGS.prior_preference_glimpses, FLAGS.rl_reward)
+            experiment_name += '_c{}a{}p{}{}'.format(FLAGS.prior_preference_c, FLAGS.precision_alpha, FLAGS.prior_preference_glimpses, FLAGS.rl_reward)
         if FLAGS.uk_folds:
             experiment_name += '_ukTr{}Te{}U{}Cy{}'.format(FLAGS.num_uk_train, FLAGS.num_uk_test, FLAGS.num_uk_test_used, FLAGS.uk_cycling)
         if FLAGS.binarize_MNIST:
@@ -140,7 +148,7 @@ class Utility(object):
         #          'polarRel: r, theta')
         # more important settings
         parser.add_argument('--planner', type=str, default='ActInf', choices=['ActInf', 'RL'], help='Planning strategy.')
-        parser.add_argument('--rl_reward', type=str, default='clf', choices=['clf', 'G1'], help='Rewards for ActInf location policy. For other planners always clf.')
+        parser.add_argument('--rl_reward', type=str, default='clf', choices=['clf', 'G1', 'G'], help='Rewards for ActInf location policy. For other planners always clf.')
         parser.add_argument('--beliefUpdate', type=str, default='fb', choices=['fb', 'fc', 'RAM'], help='Belief update strategy.')
         parser.add_argument('--normalise_fb', type=int, default=0, choices=[0, 1, 2], help='Use min_normalisation for prediction fb or not. 1: divide by baseline, 1: subtract baseline')
         parser.add_argument('--prior_preference_c', type=int, default=2, help='Strength of preferences for correct / wrong classification.')
@@ -271,3 +279,35 @@ class ElapsedFormatter:
         # using timedelta here for convenient default formatting
         elapsed = timedelta(seconds=np.ceil(elapsed_seconds))  # ceil to not display microseconds
         return "{} {}".format(elapsed, record.getMessage())
+
+
+class Proc_Queue(deque):
+    """
+    Custom queue to manage the number of (plotting) processes run in parallel to training.
+    When passing max_len first wait for a process to finish, then start the next."""
+    def __init__(self, max_len):
+        super().__init__()
+        self.max_len = max_len
+
+    def add_proc(self, x):
+        """If queue already full: wait for a process to terminate, then start x and append it"""
+        assert type(x) == Process
+
+        if len(self) >= self.max_len:
+            to_remove = None
+            while not to_remove:
+                for elem in self:
+                    if not elem.is_alive():
+                        elem.join()
+                        to_remove = elem
+                        break
+                else:
+                    time.sleep(1)
+            self.remove(to_remove)
+
+        self.append(x)
+        x.start()
+
+    def cleanup(self):
+        while self:
+            self.popleft().join()

@@ -4,22 +4,16 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
-
-
-def softmax(x):
-    """Compute softmax values for each sets of scores in x."""
-    e_x = np.exp(x - np.max(x))
-    return e_x / e_x.sum(axis=0)
+import functools
 
 
 def visualisation_level(level):
     """Minimum visualisation level at which the function is executed"""
     def decorator(func):
+        @functools.wraps(func)
         def func_wrapper(self, *args, **kwargs):
             if self.visualisation_level >= level:
                 return func(self, *args, **kwargs)
-            else:
-                return
         return func_wrapper
     return decorator
 
@@ -43,7 +37,7 @@ class Base:
         self.lbl_map = FLAGS.class_remapping
 
 
-    def visualise(self, sess, feed, suffix=None, nr_obs_overview=8, nr_obs_reconstr=5):
+    def visualise(self, d, suffix=None, nr_obs_overview=8, nr_obs_reconstr=5):
         pass
 
     def _adjust_loc(self, locs):
@@ -68,8 +62,35 @@ class Base:
             idx_examples += list(idx_uk[:nr_uk])
         return idx_examples
 
-    def _eval_feed(self, sess, feed):
-        d = sess.run(self.fetch, feed_dict=feed)
+    def eval_feed(self, sess, feed, model):
+        fetch = {'step'               : model.global_step,
+                 'epoch'              : model.epoch_num,
+                 'phase'              : model.phase,
+                 'x'                  : model.x_MC,
+                 'y'                  : model.y_MC,
+                 'locs'               : model.actions,
+                 'gl_composed'        : model.glimpses_composed,
+                 'clf'                : model.classification,
+                 'decisions'          : model.decisions,
+                 'state_believes'     : model.state_believes,
+                 'G'                  : model.G,
+                 'nll_posterior'      : model.nll_posterior,
+                 'glimpse'            : model.obs,
+                 'reconstr_posterior' : model.reconstr_posterior,
+                 'reconstr_prior'     : model.reconstr_prior,
+                 'KLdivs'             : model.KLdivs,
+                 'fb'                 : model.fb,
+                 'uk_belief'          : model.uk_belief,
+                 'potential_actions'  : model.potential_actions,
+                 'H_exp_exp_obs'      : model.H_exp_exp_obs,
+                 'exp_H'              : model.exp_H,
+                 'exp_exp_obs'        : model.exp_exp_obs,
+                 'selected_exp_obs'   : model.selected_exp_obs,
+                 'z_post'             : model.z_post,
+                 'selected_action_idx': model.selected_action_idx,
+                 }
+
+        d = sess.run(fetch, feed_dict=feed)
 
         d['phase'] = d['phase'].decode("utf-8")
 

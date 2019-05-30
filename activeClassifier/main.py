@@ -54,7 +54,7 @@ def evaluate(FLAGS, sess, model, feed, num_batches, writer, visual=None, proc_qu
         batch_values['y'] = batch_values['y_MC']
         sfx = '_' + writer.get_logdir().split('/')[-1]
         if proc_queue is not None:
-            proc_queue.add_proc(Process(target=batch_plotting, args=(visual, batch_values, sfx)))
+            proc_queue.add_proc(target=batch_plotting, args=(visual, batch_values, sfx))
         else:
             batch_plotting(visual, batch_values, sfx)
 
@@ -68,7 +68,7 @@ def run_eval(FLAGS, sess, feeds, model, writers, visual, proc_queue):
     # d = visual.eval_feed(sess, feeds['eval_train'], model)
     # Visual.visualise(d, suffix='_train')
     d = visual.eval_feed(sess, feeds['eval_valid'], model)
-    proc_queue.add_proc(Process(target=visual.visualise, args=(d, '_valid')))
+    proc_queue.add_proc(target=visual.visualise, args=(d, '_valid'))
 
     evaluate(FLAGS, sess, model, feeds['eval_train'], FLAGS.batches_per_eval_valid, writers['train'], visual, proc_queue)
     evaluate(FLAGS, sess, model, feeds['eval_valid'], FLAGS.batches_per_eval_valid, writers['valid'], visual, proc_queue)
@@ -80,7 +80,7 @@ def intermed_plots(sess, feeds, model, visual, proc_queue):
     tmp_feed = feeds['eval_valid'].copy()
     tmp_feed[model.rnd_loc_eval] = True
     d = visual.eval_feed(sess, feed=tmp_feed, model=model)
-    proc_queue.add_proc(Process(target=visual.plot_planning_patches, args=(d, 2, '', 'rnd_loc_eval')))
+    proc_queue.add_proc(target=visual.plot_planning_patches, args=(d, 2, '', 'rnd_loc_eval'))
 
 
 def training_loop(FLAGS, sess, model, handles, writers, phase):

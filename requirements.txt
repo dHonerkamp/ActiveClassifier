@@ -1,9 +1,6 @@
-datetime
-argparse
-logging
-math
 numpy
 pandas
 matplotlib
 sklearn
-tensorflow==1.8
+tensorflow-gpu==1.8
+jupyter

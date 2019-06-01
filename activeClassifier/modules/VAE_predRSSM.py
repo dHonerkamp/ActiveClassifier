@@ -134,34 +134,41 @@ class Decoder:
                     sigma = tf.layers.conv2d_transpose(hidden, filters=1, kernel_size=[2, 2], padding='valid', activation=tf.nn.softplus)
                     sigma += self._min_stddev
                     sigma = tf.layers.flatten(sigma)
+                else:
+                    sigma = None
             else:
                 hidden = tf.layers.dense(inputs, **self._kwargs)
                 mu_logits = tf.layers.dense(hidden, self.size_glimpse_out, None)
                 if self._gl_std == -1:
                     sigma = tf.layers.dense(hidden, self.size_glimpse_out, tf.nn.softplus)
                     sigma += self._min_stddev
+                else:
+                    sigma = None
 
             mu_prob = tf.nn.sigmoid(mu_logits)
 
-            if self._gl_std != -1:
-                sigma = tf.fill(tf.shape(mu_prob), tf.cast(self._gl_std, tf.float32))
-
             if true_glimpse is not None:
-                if self._gl_std == -1:
-                    dist = tf.distributions.Normal(loc=mu_prob, scale=sigma)
-                    loss = -dist.log_prob(true_glimpse)
-                    loss = tf.reduce_sum(loss, axis=-1)
-                else:
-                    dist = MSEDistribution(mu_prob)
-                    loss = -dist.log_prob(true_glimpse)
-                    loss = tf.reduce_sum(loss, axis=-1)
+                loss = self._nll_loss(mu_prob, sigma, true_glimpse)
             else:
                 loss = None
 
         return {'sample': mu_prob,
                 'logits': mu_logits,
-                'params': tf.concat([mu_prob, sigma], axis=1),
+                'mu_prob': mu_prob,
+                'sigma': sigma,
                 'loss'  : loss}
+
+    def _nll_loss(self, mu_prob, sigma, true_glimpse):
+        if self._gl_std == -1:
+            dist = tf.distributions.Normal(loc=mu_prob, scale=sigma)
+            loss = -dist.log_prob(true_glimpse)
+            loss = tf.reduce_sum(loss, axis=-1)
+        else:
+            dist = MSEDistribution(mu_prob)
+            loss = -dist.log_prob(true_glimpse)
+            loss = tf.reduce_sum(loss, axis=-1)
+        return loss
+
 
     @property
     def output_size(self):

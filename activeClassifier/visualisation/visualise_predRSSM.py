@@ -25,7 +25,7 @@ class Visualization_predRSSM(Base):
         if (self.planner == 'ActInf') & (d['epoch'] >= self.pre_train_epochs):
             # self.plot_planning(d, nr_examples=nr_obs_reconstr)
             self.plot_planning_patches(d, nr_examples=nr_obs_reconstr)
-            self.plot_FE_outputs(d, 3, suffix)
+            self.plot_FE(d, 3, suffix)
 
     @visualisation_level(1)
     def plot_reconstr(self, d, nr_examples, suffix='', folder_name='reconstr'):
@@ -160,6 +160,8 @@ class Visualization_predRSSM(Base):
         nax_y = self.num_glimpses
 
         f, axes = plt.subplots(nax_y, nax_x, figsize=(8 * self.num_scales * nax_x, 4 * nax_y), squeeze=False)
+        frames_cmap = matplotlib.cm.get_cmap('bwr')
+        frames_color = frames_cmap(np.linspace(1, 0, self.num_policies))
         for i in range(nr_examples):
             # Note: first action is random, meaning d['potential_actions'][0] will be zero
             for t in range(self.num_glimpses):
@@ -173,7 +175,7 @@ class Visualization_predRSSM(Base):
                     # add current believes to legend
                     ranked_believes = np.argsort(- d['state_believes'][t, i, :])
                     lbl = 'hyp: ' + ', '.join('{} ({:.2f})'.format(j,  d['state_believes'][t, i, j]) for j in ranked_believes[:5])
-                    axes[t, i].scatter(0, 0, marker='x', linewidth=0, s=0, label=lbl)
+                    axes[t, i].add_patch(Rectangle((0, 0), width=0.1, height=0.1, linewidth=0, color='white', label=lbl))
 
                     if np.sum(d['H_exp_exp_obs'][t, i, :]) == 0.:
                         axes[t, i].set_title('t: {}, decision - no new glimpse'.format(t))
@@ -181,18 +183,18 @@ class Visualization_predRSSM(Base):
                         axes[t, i].set_title('t: {}, selected policy: {}'.format(t, np.argmax(d['G'][t, i, :])))
 
                         # plot rectangles for evaluated next locations
-                        for k in range(self.num_policies):
+                        ranked_policies = np.argsort(- d['G'][t, i, :-1])
+                        for iii, k in enumerate(ranked_policies):
                             # potential location under evaluation
                             locs = d['potential_actions'][t, i, k]
-                            color = 'C{}'.format(k)
                             correct = np.all((locs == d['locs'][t, i, :]))
 
                             lbl = '{}: G: {:.2f}, H(exp): {:.2f}, E(H): {:.2f}, G_dec: {:.2f}'.format(k, d['G'][t, i, k], d['H_exp_exp_obs'][t, i, k], d['exp_H'][t, i, k], d['G'][t, i, -1])
                             axes[t, i].add_patch(Rectangle(locs[::-1] - self.scale_sizes[0] / 2,
                                                                width=self.scale_sizes[0], height=self.scale_sizes[0],
-                                                               edgecolor=color, facecolor='none', linewidth=1.5, label=lbl))
+                                                               edgecolor=frames_color[iii], facecolor='none', linewidth=1.5, label=lbl))
                             if correct:
-                                axes[t, i].scatter(locs[1], locs[0], marker='x', facecolors=color, linewidth=1.5, s=0.25 * (5 * 8 * 24))
+                                axes[t, i].scatter(locs[1], locs[0], marker='x', facecolors=frames_color[iii], linewidth=1.5, s=0.25 * (5 * 8 * 24))
 
                     # place legend next to plot
                     chartBox = axes[t, i].get_position()
@@ -206,7 +208,7 @@ class Visualization_predRSSM(Base):
         self._save_fig(f, folder_name, '{}{}.png'.format(self.prefix, suffix))
 
     @visualisation_level(2)
-    def plot_FE_outputs(self, d, nr_examples, suffix='', folder_name='FE'):
+    def plot_FE(self, d, nr_examples, suffix='', folder_name='FE'):
         # T x [True glimpse, posterior, exp_exp_obs, exp_obs...]
         nax_x = 3 + self.num_classes_kn
         nax_y = self.num_glimpses
@@ -250,9 +252,10 @@ class Visualization_predRSSM(Base):
                     axes[t, 2].imshow(exp_exp_obs[t, i, p], cmap='gray')
                     axes[t, 2].set_title('H(exp) policy0: {:.2f}'.format(d['H_exp_exp_obs'][t, i, p]))
 
-                    for k in range(self.num_classes_kn):
+                    ranked_believes = np.argsort(- d['state_believes'][t, i, :])
+                    for k in ranked_believes:
                         axes[t, 3 + k].imshow(exp_obs_prior[t, i, k], cmap='gray')
-                        axes[t, 3 + k].set_title('k: {}'.format(k))
+                        axes[t, 3 + k].set_title('k: {}, p: {:.2f}'.format(k, d['state_believes'][t, i, k]))
 
             [ax.set_axis_off() for ax in axes.ravel()]
             self._save_fig(f, folder_name, '{}{}_n{}.png'.format(self.prefix, suffix, i))

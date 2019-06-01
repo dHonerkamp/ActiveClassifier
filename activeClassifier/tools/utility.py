@@ -79,7 +79,7 @@ class Utility(object):
         if FLAGS.use_conv:
             experiment_name += '_CNN'
         if FLAGS.planner == 'ActInf':
-            experiment_name += '_c{}a{}p{}{}'.format(FLAGS.prior_preference_c, FLAGS.precision_alpha, FLAGS.prior_preference_glimpses, FLAGS.rl_reward)
+            experiment_name += '_c{}a{}p{}{}pixel{}'.format(FLAGS.prior_preference_c, FLAGS.precision_alpha, FLAGS.prior_preference_glimpses, FLAGS.rl_reward, FLAGS.use_pixel_obs_FE)
         if FLAGS.uk_folds:
             experiment_name += '_ukTr{}Te{}U{}Cy{}'.format(FLAGS.num_uk_train, FLAGS.num_uk_test, FLAGS.num_uk_test_used, FLAGS.uk_cycling)
         if FLAGS.binarize_MNIST:
@@ -117,7 +117,7 @@ class Utility(object):
         parser.add_argument('--cache', type=int, default=1, help="Whether to cache the dataset.")
         parser.add_argument('--gpu_fraction', type=float, default=0., help="Limit GPU-RAM.")
         parser.add_argument('--CUDA_VISIBLE_DEVICES', type=str, default=-1, help="Number of the gpu to use. -1 to ignore.")
-        # parser.add_argument('--debug', type=str, default=True, help="Debug mode.")
+        parser.add_argument('--debug', type=int, default=0, choices=[0, 1], help="Debug mode.")
         # parser.add_argument('--folds', type=int, default=1, help='How often to run the model. uk_folds takes precedence.')
         # parser.add_argument('--f_vis', type=int, default=5, help='Stop visualizing and checkpointing after this many folds.')
         parser.add_argument('--visualisation_level', type=int, default=2, choices=[0, 1, 2], help='Level of visuals / plots to be produced. 2: all plots, 0: no plots.')
@@ -154,6 +154,7 @@ class Utility(object):
         parser.add_argument('--prior_preference_c', type=int, default=2, help='Strength of preferences for correct / wrong classification.')
         parser.add_argument('--prior_preference_glimpses', type=int, default=-4, help='Penalty for taking more than 4 glimpses (Visual foraging: -2*c).')
         parser.add_argument('--precision_alpha', type=int, default=1, help='Precision constant. Visual foraging_demo: 512')
+        parser.add_argument('--use_pixel_obs_FE', type=int, default=0, choices=[0, 1], help='Whether to calculate the expected Free Energy on the pixel outputs.')
         parser.add_argument('--size_z', type=int, default=32, help='Dimensionality of the hidden states z.')
         parser.add_argument('--z_dist', type=str, default='B', choices=['N', 'B'], help='Distributions of the hidden state. N: normal, B: bernoulli.')
         parser.add_argument('--z_B_kl', type=int, default=22, choices=[20, 21, 22, 212], help='Bernoulli latent code only: type of KL divergence. Corresponds to equations in https://arxiv.org/abs/1611.00712.')
@@ -248,6 +249,17 @@ class Utility(object):
         logger.addHandler(file_handler)
 
         logger.setLevel(logging.INFO)
+
+        # log tf to a file as well
+        tf_logging = logging.getLogger('tensorflow')
+        tf_logging.setLevel(logging.DEBUG)
+
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        fh = logging.FileHandler(os.path.join(FLAGS.path, 'tf.log'))
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(formatter)
+        tf_logging.addHandler(fh)
+
         # os.environ['TF_CPP_MIN_VLOG_LEVEL'] = '2'
 
         if unparsed:

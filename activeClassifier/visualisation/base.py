@@ -35,6 +35,7 @@ class Base:
         self.planner = FLAGS.planner
         self.uk_label = FLAGS.uk_label
         self.lbl_map = FLAGS.class_remapping
+        self.use_pixel_obs_FE = FLAGS.use_pixel_obs_FE
 
 
     def visualise(self, d, suffix=None, nr_obs_overview=8, nr_obs_reconstr=5):
@@ -85,7 +86,7 @@ class Base:
                  'H_exp_exp_obs'      : model.H_exp_exp_obs,
                  'exp_H'              : model.exp_H,
                  'exp_exp_obs'        : model.exp_exp_obs,
-                 'selected_exp_obs'   : model.selected_exp_obs,
+                 'selected_exp_obs_enc'   : model.selected_exp_obs_enc,
                  'z_post'             : model.z_post,
                  'selected_action_idx': model.selected_action_idx,
                  }
@@ -148,7 +149,7 @@ class Base:
         top_belief = np.argmax(belief)
         ax.set_title('class {}, belief: {}, prob: {:.3f}'.format(decision, top_belief, belief[top_belief]))
 
-    def _scale_reshp(self, x):
+    def _glimpse_reshp(self, x):
         shp = x.shape
         ndims = len(shp) - 1
         sc0 = self.scale_sizes[0]

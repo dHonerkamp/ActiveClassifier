@@ -25,7 +25,7 @@ class Visualization_predRSSM(Base):
         if (self.planner == 'ActInf') & (d['epoch'] >= self.pre_train_epochs):
             # self.plot_planning(d, nr_examples=nr_obs_reconstr)
             self.plot_planning_patches(d, nr_examples=nr_obs_reconstr)
-            self.plot_z(d, 3, suffix)
+            self.plot_FE_outputs(d, 3, suffix)
 
     @visualisation_level(1)
     def plot_reconstr(self, d, nr_examples, suffix='', folder_name='reconstr'):
@@ -40,9 +40,9 @@ class Visualization_predRSSM(Base):
 
         nax = 2 + self.num_classes_kn
 
-        gl = self._scale_reshp(d['glimpse'])  # [T, B, scale[0], scales*scale[0]]
-        gl_post = self._scale_reshp(d['reconstr_posterior'])  # [T, B, scale[0], scales*scale[0]]
-        gl_preds = self._scale_reshp(d['reconstr_prior'])  # [T, B, hyp, scale[0], scales*scale[0]]
+        gl = self._glimpse_reshp(d['glimpse'])  # [T, B, scale[0], scales*scale[0]]
+        gl_post = self._glimpse_reshp(d['reconstr_posterior'])  # [T, B, scale[0], scales*scale[0]]
+        gl_preds = self._glimpse_reshp(d['reconstr_prior'])  # [T, B, hyp, scale[0], scales*scale[0]]
 
         idx_examples = self._get_idx_examples(d['y'], nr_examples, replace=False)
 
@@ -206,26 +206,33 @@ class Visualization_predRSSM(Base):
         self._save_fig(f, folder_name, '{}{}.png'.format(self.prefix, suffix))
 
     @visualisation_level(2)
-    def plot_z(self, d, nr_examples, suffix='', folder_name='z'):
+    def plot_FE_outputs(self, d, nr_examples, suffix='', folder_name='FE'):
         # T x [True glimpse, posterior, exp_exp_obs, exp_obs...]
         nax_x = 3 + self.num_classes_kn
         nax_y = self.num_glimpses
 
-        gl = self._scale_reshp(d['glimpse'])  # [T, B, scale[0], scales*scale[0]]
-        if self.size_z == 10:
-            shp = [5, 2]
-        elif self.size_z == 32:
-            shp = [8, 4]
-        elif self.size_z == 128:
-            shp = [16, 8]
+        gl = self._glimpse_reshp(d['glimpse'])  # [T, B, scale[0], scales*scale[0]]
+
+        if self.use_pixel_obs_FE:
+            posterior = self._glimpse_reshp(d['reconstr_posterior'])
+            exp_exp_obs = self._glimpse_reshp(d['exp_exp_obs'])
+            exp_obs_prior = self._glimpse_reshp(d['reconstr_prior'])
         else:
-            shp = 2 * [int(np.sqrt(self.size_z))]
-            if np.prod(shp) != self.size_z:
-                print('Unspecified shape for this size_z and plot_z. Skipping z plots.')
-                return
-        z_post =  np.reshape(d['z_post'], [self.num_glimpses, self.batch_size_eff] + shp)
-        exp_exp_obs = np.reshape(d['exp_exp_obs'], [self.num_glimpses, self.batch_size_eff, self.num_policies] + shp)
-        exp_obs_prior = np.reshape(d['selected_exp_obs'], [self.num_glimpses, self.batch_size_eff, self.num_classes_kn] + shp)
+            if self.size_z == 10:
+                shp = [5, 2]
+            elif self.size_z == 32:
+                shp = [8, 4]
+            elif self.size_z == 128:
+                shp = [16, 8]
+            else:
+                shp = 2 * [int(np.sqrt(self.size_z))]
+                if np.prod(shp) != self.size_z:
+                    print('Unspecified shape for this size_z and plot_z. Skipping z plots.')
+                    return
+
+            posterior = np.reshape(d['z_post'], [self.num_glimpses, self.batch_size_eff] + shp)
+            exp_exp_obs = np.reshape(d['exp_exp_obs'], [self.num_glimpses, self.batch_size_eff, self.num_policies] + shp)
+            exp_obs_prior = np.reshape(d['selected_exp_obs_enc'], [self.num_glimpses, self.batch_size_eff, self.num_classes_kn] + shp)
 
         for i in range(nr_examples):
             f, axes = plt.subplots(nax_y, nax_x, figsize=(4 * self.num_scales * nax_x, 4 * nax_y), squeeze=False)
@@ -236,8 +243,8 @@ class Visualization_predRSSM(Base):
                     axes[t, 0].imshow(gl[t, i], cmap='gray')
                     axes[t, 0].set_title('t: {}'.format(t))
 
-                    axes[t, 1].imshow(z_post[t, i], cmap='gray')
-                    axes[t, 1].set_title('z_post')
+                    axes[t, 1].imshow(posterior[t, i], cmap='gray')
+                    axes[t, 1].set_title('posterior')
 
                     p = d['selected_action_idx'][t, i]
                     axes[t, 2].imshow(exp_exp_obs[t, i, p], cmap='gray')

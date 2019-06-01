@@ -69,8 +69,8 @@ class Visualization_ActCl(Base):
         nr_examples = min(nr_examples, self.batch_size_eff)
         nax = 1 + self.num_classes
 
-        gl = self._scale_reshp(d['glimpse'])  # [T, B, scale[0], scales*scale[0]]
-        gl_preds = self._scale_reshp(d['glimpse_reconstr'])  # [T, B, hyp, scale[0], scales*scale[0]]
+        gl = self._glimpse_reshp(d['glimpse'])  # [T, B, scale[0], scales*scale[0]]
+        gl_preds = self._glimpse_reshp(d['glimpse_reconstr'])  # [T, B, hyp, scale[0], scales*scale[0]]
 
         for i in range(nr_examples):
             f, axes = plt.subplots(self.num_glimpses + 1, nax, figsize=(4 * self.num_scales * nax, 4 * (self.num_glimpses + 1)))
@@ -98,8 +98,8 @@ class Visualization_ActCl(Base):
         nax_x = 2 + self.num_classes
         nax_y = self.num_glimpses + 1
 
-        exp_exp_obs = self._scale_reshp(d['exp_exp_obs'])  # [T, B, n_policies, scale[0], scales*scale[0]]
-        exp_obs = self._scale_reshp(d['exp_obs'])  # [T, B, n_policies, num_classes, scale[0], scales*scale[0]]
+        exp_exp_obs = self._glimpse_reshp(d['exp_exp_obs'])  # [T, B, n_policies, scale[0], scales*scale[0]]
+        exp_obs = self._glimpse_reshp(d['exp_obs'])  # [T, B, n_policies, num_classes, scale[0], scales*scale[0]]
 
         for i in range(nr_examples):
             for k in range(self.num_policies):

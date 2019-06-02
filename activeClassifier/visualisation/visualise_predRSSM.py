@@ -4,6 +4,9 @@ matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 
+import logging
+logging.getLogger()
+
 from visualisation.base import Base, visualisation_level
 from tools.utility import softmax
 
@@ -18,10 +21,11 @@ class Visualization_predRSSM(Base):
         nr_obs_reconstr = min(nr_obs_reconstr, self.batch_size_eff)
 
         self.plot_overview(d, nr_obs_overview, suffix)
-        self.plot_stateBelieves(d, suffix)
         self.plot_reconstr(d, nr_obs_reconstr, suffix)
 
-    #     self.plot_fb(d, prefix)
+        # moved to batch-wise:
+        # self.plot_stateBelieves(d, suffix)
+        # self.plot_fb(d, prefix)
         if (self.planner == 'ActInf') & (d['epoch'] >= self.pre_train_epochs):
             # self.plot_planning(d, nr_examples=nr_obs_reconstr)
             self.plot_planning_patches(d, nr_examples=nr_obs_reconstr)
@@ -271,7 +275,7 @@ class Visualization_predRSSM(Base):
                 ax.legend(loc='upper right')
 
         nax = self.num_classes
-        ntax = self.num_glimpses
+        ntax = self.num_glimpses - 1
         bins = 40
 
         f, axes = plt.subplots(ntax, nax, figsize=(4 * nax, 4 * self.num_glimpses))
@@ -291,9 +295,10 @@ class Visualization_predRSSM(Base):
                     fb_corr  = d['fb'][t, is_hyp, hyp]
                     fb_wrong = d['fb'][t, ~is_hyp, hyp]
                 else:  # last row: sum over time
-                    pre = 'All t: ' if (hyp == 0) else ''
-                    fb_corr  = d['fb'][:, is_hyp, hyp].sum(axis=0)
-                    fb_wrong = d['fb'][:, ~is_hyp, hyp].sum(axis=0)
+                    break
+                    # pre = 'All t: ' if (hyp == 0) else ''
+                    # fb_corr  = d['fb'][:, is_hyp, hyp].sum(axis=0)
+                    # fb_wrong = d['fb'][:, ~is_hyp, hyp].sum(axis=0)
                 fb_hist((fb_corr, 'correct hyp'),
                         (fb_wrong, 'wrong hyp'),
                         axes[t, hyp], '{}hyp: {}'.format(pre, self.lbl_map[hyp]), add_legend=(t==0))
@@ -326,8 +331,10 @@ class Visualization_predRSSM(Base):
         wrong = top_believes[:, ~is_corr]
 
         for t in range(ntax):
-            axes[t, 0].hist(corr[t+1], bins=bins, alpha=0.5, label='corr')
-            axes[t, 0].hist(wrong[t+1], bins=bins, alpha=0.5, label='wrong')
+            if len(corr):
+                axes[t, 0].hist(corr[t+1], bins=bins, alpha=0.5, label='corr')
+            if len(wrong):
+                axes[t, 0].hist(wrong[t+1], bins=bins, alpha=0.5, label='wrong')
             axes[t, 0].legend(loc='upper right')
             axes[t, 0].set_title('Top believes after glimpse {}'.format(t))
             axes[t, 0].set_xlim([0, 1])

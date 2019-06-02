@@ -301,7 +301,7 @@ class Proc_Queue(deque):
         super().__init__()
         self.max_len = max_len
 
-    def add_proc(self, target, args):
+    def add_proc(self, target, args, name=None):
         """If queue already full: wait for a process to terminate, then start x and append it"""
         if self.max_len == 0:  # don't add any processes, execute target and return
             target(*args)
@@ -319,12 +319,11 @@ class Proc_Queue(deque):
                     time.sleep(1)
             self.remove(to_remove)
 
-
-        else:
-            proc = Process(target=target, args=args)
-            self.append(proc)
-            proc.start()
+        logging.debug('Process qeue length:', len(self), self)
+        proc = Process(target=target, args=args, name=name)
+        self.append(proc)
+        proc.start()
 
     def cleanup(self):
-        while self:
+        while len(self):
             self.popleft().join()

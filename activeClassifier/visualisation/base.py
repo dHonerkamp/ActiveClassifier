@@ -6,6 +6,9 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 import functools
 
+import logging
+logging.getLogger()
+
 
 def visualisation_level(level):
     """Minimum visualisation level at which the function is executed"""
@@ -183,5 +186,7 @@ class Base:
             os.mkdir(path)
 
         f.tight_layout()
+        logging.debug('Saving fig {}'.format(os.path.join(folder_name, name)))
         f.savefig(os.path.join(path, name), bbox_inches='tight')
         plt.close(f)
+        logging.debug('Saved fig {}'.format(os.path.join(folder_name, name)))

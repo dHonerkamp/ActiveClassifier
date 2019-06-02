@@ -181,7 +181,7 @@ class Visualization_predRSSM(Base):
                     lbl = 'hyp: ' + ', '.join('{} ({:.2f})'.format(j,  d['state_believes'][t, i, j]) for j in ranked_believes[:5])
                     axes[t, i].add_patch(Rectangle((0, 0), width=0.1, height=0.1, linewidth=0, color='white', label=lbl))
 
-                    if np.sum(d['H_exp_exp_obs'][t, i, :]) == 0.:
+                    if (d['decisions'][:t+1, i] != -1).any():
                         axes[t, i].set_title('t: {}, decision - no new glimpse'.format(t))
                     else:
                         axes[t, i].set_title('t: {}, selected policy: {}'.format(t, np.argmax(d['G'][t, i, :])))
@@ -205,7 +205,8 @@ class Visualization_predRSSM(Base):
                     axes[t, i].set_position([chartBox.x0, chartBox.y0, chartBox.width * 0.6, chartBox.height])
                     axes[t, i].legend(loc='center left', bbox_to_anchor=(1.04, 0.5), borderaxespad=0)
 
-                    if np.sum(d['H_exp_exp_obs'][t, i, :]) == 0.:
+                    if (d['decisions'][:t+1, i] != -1).any():
+                        [axes[ttt, i].set_axis_off() for ttt in range(t+1, self.num_glimpses)]
                         break
 
         [(ax.set_xticks([]), ax.set_yticks([]), ax.set_ylim([self.img_shape[0] - 1, 0]), ax.set_xlim([0, self.img_shape[1] - 1]))  for ax in axes.ravel()]

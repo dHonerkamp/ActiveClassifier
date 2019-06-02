@@ -297,9 +297,10 @@ class Proc_Queue(deque):
     """
     Custom queue to manage the number of (plotting) processes run in parallel to training.
     When passing max_len first wait for a process to finish, then start the next."""
-    def __init__(self, max_len):
+    def __init__(self, max_len, max_wait=60):
         super().__init__()
         self.max_len = max_len
+        self.max_wait = max_wait
 
     def add_proc(self, target, args, name=None):
         """If queue already full: wait for a process to terminate, then start x and append it"""
@@ -309,6 +310,7 @@ class Proc_Queue(deque):
 
         if len(self) >= self.max_len:
             to_remove = None
+            t = time.time()
             while not to_remove:
                 for elem in self:
                     if not elem.is_alive():
@@ -317,6 +319,8 @@ class Proc_Queue(deque):
                         break
                 else:
                     time.sleep(1)
+                    if self.max_wait and ((time.time() - t) > 60):
+                        raise ValueError('Subprocesses took more than {} to finish: {}'.format(self.max_wait, self))
             self.remove(to_remove)
 
         logging.debug('Process qeue length:', len(self), self)

@@ -220,6 +220,8 @@ class Utility(object):
         Currently only for axis 0 or 1 = batch_sz
         """
         for s in stats.keys():
+            assert out[s].shape[:2].count(batch_sz) == 1, 'Ambigous shape, multiple dim with size batch_sz: {}. ' \
+                                                      'Make sure num_glimpses != batch_sz.'.format(out[s].shape)
             dim0 = out[s].shape[0]
             batch_major = (dim0 == batch_sz)
 
@@ -231,11 +233,12 @@ class Utility(object):
         return stats
 
     @staticmethod
-    def init():
+    def init(experiment_name=None):
         # Parsing experimental set up
         FLAGS, unparsed = Utility.parse_arg()
         Utility.auto_adjust_flags(FLAGS)
-        experiment_name = Utility.set_exp_name(FLAGS)
+        if experiment_name is None:
+            experiment_name = Utility.set_exp_name(FLAGS)
 
         folder = '{d}{tsz}{resz}{uk}'.format(d=FLAGS.dataset, tsz=FLAGS.translated_size or '', resz=FLAGS.img_resize or '',
                                              uk = '_UK' if FLAGS.num_uk_test or FLAGS.uk_test_labels else '')

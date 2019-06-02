@@ -135,11 +135,11 @@ def training_loop(FLAGS, sess, model, handles, writers, phase):
     proc_queue.cleanup()
 
 
-def run_phase(FLAGS, phase, initial_phase, config, cp_path, train_data, valid_data, test_data):
+def run_phase(FLAGS, phase, initial_phase, config, writers, train_data, valid_data, test_data):
     logging.info('Starting phase {}.'.format(phase['name']))
     tf.keras.backend.clear_session()
 
-    writers = Utility.init_writers(FLAGS)
+    cp_path = FLAGS.path + "/cp.ckpt"
 
     if FLAGS.uk_label and (phase['incl_uk'] == 0):
         x, y = train_data
@@ -170,3 +170,5 @@ def run_phase(FLAGS, phase, initial_phase, config, cp_path, train_data, valid_da
         # Train
         training_loop(FLAGS, sess, model, handles, writers, phase)
         model.saver.save(sess, cp_path)
+
+        return writers

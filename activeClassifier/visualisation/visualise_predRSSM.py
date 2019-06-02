@@ -19,6 +19,7 @@ class Visualization_predRSSM(Base):
     def visualise(self, d, suffix='', nr_obs_overview=8, nr_obs_reconstr=5):
         nr_obs_overview = min(nr_obs_overview, self.batch_size_eff)  # batch_size_eff is set in _eval_feed() -> has to come before
         nr_obs_reconstr = min(nr_obs_reconstr, self.batch_size_eff)
+        nr_obs_FE = min(3, self.batch_size_eff)
 
         self.plot_overview(d, nr_obs_overview, suffix)
         self.plot_reconstr(d, nr_obs_reconstr, suffix)
@@ -29,7 +30,7 @@ class Visualization_predRSSM(Base):
         if (self.planner == 'ActInf') & (d['epoch'] >= self.pre_train_epochs):
             # self.plot_planning(d, nr_examples=nr_obs_reconstr)
             self.plot_planning_patches(d, nr_examples=nr_obs_reconstr)
-            self.plot_FE(d, 3, suffix)
+            self.plot_FE(d, nr_obs_FE, suffix)
 
     @visualisation_level(1)
     def plot_reconstr(self, d, nr_examples, suffix='', folder_name='reconstr'):

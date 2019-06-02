@@ -24,13 +24,16 @@ def main():
     with open(os.path.join(FLAGS.path, 'log_flags.pkl'), 'wb') as f:
         pickle.dump(vars(FLAGS), f)
 
-    cp_path = FLAGS.path + "/cp.ckpt"
+    writers = Utility.init_writers(FLAGS)
     initial_phase = True
 
     for phase in phases:
         if phase['num_epochs'] > 0:
-            run_phase(FLAGS, phase, initial_phase, config, cp_path, train_data, valid_data, test_data)
+            run_phase(FLAGS, phase, initial_phase, config, writers, train_data, valid_data, test_data)
             initial_phase = False
+
+    for writer in writers.values():
+        writer.close()
 
 
 if __name__ == '__main__':

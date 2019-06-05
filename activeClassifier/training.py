@@ -15,6 +15,8 @@ from visualisation.visualise_predRSSM import Visualization_predRSSM
 import numpy as np
 np.set_printoptions(precision=2)
 
+logger = logging.getLogger(__name__)
+
 
 def batch_plotting(visual, batch_values, sfx):
     visual.plot_fb(batch_values, sfx)
@@ -54,7 +56,7 @@ def evaluate(FLAGS, sess, model, feed, num_batches, writer, visual=None, proc_qu
     prefix = writer.get_logdir().split('/')[-1].upper() + ':'
     strs = [item for pair in sorted(zip(model.metrics_names, out["metrics"])) for item in pair] + ['f1', f1]
     s = 'step {} - phase {} - {}'.format(out['step'], out['phase'], prefix) + len(strs) // 2 * ' {}: {:.3f}'
-    logging.info(s.format(*strs))
+    logger.info(s.format(*strs))
 
 
 def run_eval(FLAGS, sess, feeds, model, writers, visual, proc_queue):
@@ -117,7 +119,7 @@ def training_loop(FLAGS, sess, model, handles, writers, phase):
             else:
                 sess.run(train_op, feed_dict=feeds['train'])
 
-        logging.info("{} epoch {}: {:.2f}min, {:.3f}s per batch, train op: {}".format(phase['name'], epochs_completed,
+        logger.info("{} epoch {}: {:.2f}min, {:.3f}s per batch, train op: {}".format(phase['name'], epochs_completed,
                                                                                       (time.time() - t) / 60,
                                                                                       (time.time() - t) / FLAGS.train_batches_per_epoch,
                                                                                       train_op.name))
@@ -126,17 +128,17 @@ def training_loop(FLAGS, sess, model, handles, writers, phase):
             run_eval(FLAGS, sess, feeds, model, writers, visual, proc_queue)
 
     if phase['final_eval']:
-        logging.info('FINISHED TRAINING, {} EPOCHS COMPLETED\n'.format(phase['num_epochs']))
+        logger.info('FINISHED TRAINING, {} EPOCHS COMPLETED\n'.format(phase['num_epochs']))
         d = visual.eval_feed(sess, feeds['eval_test'], model)
         proc_queue.add_proc(target=visual.visualise, args=(d, '_test'), name='visualise_test')
         evaluate(FLAGS, sess, model, feeds['eval_test'],  FLAGS.batches_per_eval_test,  writers['test'], visual, proc_queue)
 
-    logging.info('Cleaning up visualisation processes')
+    logger.info('Cleaning up visualisation processes')
     proc_queue.cleanup()
 
 
 def run_phase(FLAGS, phase, initial_phase, config, writers, train_data, valid_data, test_data):
-    logging.info('Starting phase {}.'.format(phase['name']))
+    logger.info('Starting phase {}.'.format(phase['name']))
     tf.keras.backend.clear_session()
 
     cp_path = FLAGS.path + "/cp.ckpt"

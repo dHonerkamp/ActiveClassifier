@@ -1,4 +1,5 @@
 import os
+import logging
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
@@ -6,8 +7,7 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 import functools
 
-import logging
-logging.getLogger()
+logger = logging.getLogger()
 
 
 def visualisation_level(level):
@@ -186,7 +186,7 @@ class Base:
             os.mkdir(path)
 
         f.tight_layout()
-        logging.debug('Saving fig {}'.format(os.path.join(folder_name, name)))
+        logger.debug('Saving fig {}'.format(os.path.join(folder_name, name)))
         f.savefig(os.path.join(path, name), bbox_inches='tight')
         plt.close(f)
-        logging.debug('Saved fig {}'.format(os.path.join(folder_name, name)))
+        logger.debug('Saved fig {}'.format(os.path.join(folder_name, name)))

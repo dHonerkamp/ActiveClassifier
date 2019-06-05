@@ -7,6 +7,8 @@ from env.cifar10 import get_cifar
 from env.notMNIST import notMNIST
 from env.omniglot import get_omni_small, get_OMNIGLOT
 
+logger = logging.getLogger(__name__)
+
 ### Unknown FLAGS
 ## When masking parts of a single dataset:
 # FLAGS.num_uk_test: int, generates FLAGS.uk_test_labels
@@ -38,7 +40,7 @@ def random_uk_selection(FLAGS, num_classes):
     FLAGS.uk_train_labels = list(uks[:FLAGS.num_uk_train])
     FLAGS.uk_test_labels = list(uks[FLAGS.num_uk_train:FLAGS.num_uk_train + FLAGS.num_uk_test])
 
-    logging.info('\tuk_train_labels: {}\n'
+    logger.info('\tuk_train_labels: {}\n'
                  '\tuk_test_labels: {}\n'
                  '\tuk_test_labels used: {}'.format(FLAGS.uk_train_labels, FLAGS.uk_test_labels,
                                                     FLAGS.num_uk_test_used))
@@ -217,8 +219,8 @@ def get_data(FLAGS):
     else:
         _, FLAGS.class_remapping, FLAGS.uk_label, FLAGS.num_classes, FLAGS.num_classes_kn = create_class_mapping_ukMax(FLAGS.num_classes, uks=[])
 
-    logging.info("Obs per dataset: {}, {}, {}".format(len(train[0]), len(valid[0]), len(test[0])))
-    logging.info('(Adapted) labels per set (uk = {}):\n'
+    logger.info("Obs per dataset: {}, {}, {}".format(len(train[0]), len(valid[0]), len(test[0])))
+    logger.info('(Adapted) labels per set (uk = {}):\n'
                  'train: {}\n'
                  'valid: {}\n'
                  'test:  {}\n'

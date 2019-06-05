@@ -85,7 +85,6 @@ class Utility(object):
         if FLAGS.binarize_MNIST:
             experiment_name += '_binar'
 
-
         if platform != 'win32':
             if FLAGS.freeze_enc:
                 experiment_name += '_frzEnc'
@@ -93,7 +92,6 @@ class Utility(object):
                 experiment_name += '_frzPol'
 
         name = os.path.join(FLAGS.exp_folder, experiment_name)
-        logging.info('CURRENT MODEL: ' + name + '\n')
 
         return name
 
@@ -137,6 +135,7 @@ class Utility(object):
         parser.add_argument('--freeze_enc', type=int, default=None, help='Number of epochs after which to freeze the encoder weights. Set to None to ignore.')
         parser.add_argument('--freeze_policyNet', type=int, default=None, help='Number of epochs after which to freeze the policyNet weights. Set to None to ignore.')
         # locations
+        parser.add_argument('--rnd_first_glimpse', type=int, default=1, choices=[0, 1], help='Whether to start with a random glimpse or plan it.')
         parser.add_argument('--max_loc_rng', type=float, default=1., help='In what range are the locations allowed to fall? (Max. is -1 to 1)')
         parser.add_argument('--loc_std', type=float, default=0.09, help='Std used to sample locations. Relative to whole image being in range (-1, 1).')
         parser.add_argument('--loc_std_min', type=float, default=0.09, help='Minimum loc_std, decaying exponentially (hardcoded decay rate).')
@@ -233,41 +232,52 @@ class Utility(object):
         return stats
 
     @staticmethod
+    def configure_logging(name, path, debug):
+        file_handler = logging.FileHandler(os.path.join(path, 'log.log'))
+
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(ElapsedFormatter())
+
+        level = logging.DEBUG if debug else logging.INFO
+
+        logging.basicConfig(level=logging.INFO,
+                            format='%(asctime)s %(name)s %(message)s',
+                            handlers=[stream_handler,
+                                      file_handler])
+
+        return logging.getLogger(name)
+
+    @staticmethod
     def init(experiment_name=None):
         # Parsing experimental set up
         FLAGS, unparsed = Utility.parse_arg()
         Utility.auto_adjust_flags(FLAGS)
         if experiment_name is None:
-            experiment_name = Utility.set_exp_name(FLAGS)
+            FLAGS.experiment_name = Utility.set_exp_name(FLAGS)
 
         folder = '{d}{tsz}{resz}{uk}'.format(d=FLAGS.dataset, tsz=FLAGS.translated_size or '', resz=FLAGS.img_resize or '',
                                              uk = '_UK' if FLAGS.num_uk_test or FLAGS.uk_test_labels else '')
-        FLAGS.path = os.path.join(FLAGS.summaries_dir, folder, experiment_name)
+        FLAGS.path = os.path.join(FLAGS.summaries_dir, folder, FLAGS.experiment_name)
         os.makedirs(FLAGS.path, exist_ok=True)
 
-        # define logger
-        logger = logging.getLogger()
-        file_handler = logging.FileHandler(os.path.join(FLAGS.path, 'log.log'))
-        file_handler.setFormatter(ElapsedFormatter())
-        logger.addHandler(file_handler)
+        logger = Utility.configure_logging(__name__, FLAGS.path, FLAGS.debug)
+        logger.info('CURRENT MODEL: ' + FLAGS.experiment_name + '\n')
 
-        logger.setLevel(logging.INFO)
-
-        # log tf to a file as well
-        tf_logging = logging.getLogger('tensorflow')
-        tf_logging.setLevel(logging.DEBUG)
-
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        fh = logging.FileHandler(os.path.join(FLAGS.path, 'tf.log'))
-        fh.setLevel(logging.DEBUG)
-        fh.setFormatter(formatter)
-        tf_logging.addHandler(fh)
+        # # log tf to a file as well
+        # tf_logging = logging.getLogger('tensorflow')
+        # tf_logging.setLevel(logging.DEBUG)
+        #
+        # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        # fh = logging.FileHandler(os.path.join(FLAGS.path, 'tf.log'))
+        # fh.setLevel(logging.DEBUG)
+        # fh.setFormatter(formatter)
+        # tf_logging.addHandler(fh)
 
         # os.environ['TF_CPP_MIN_VLOG_LEVEL'] = '2'
 
         if unparsed:
             raise ValueError('UNPARSED: {}'.format(unparsed))
-        logging.info(sys.argv)
+        logger.info(sys.argv)
 
         # reproducibility (not guaranteed if run on GPU or different platforms)
         Utility.set_seeds()
@@ -293,7 +303,7 @@ class ElapsedFormatter:
         elapsed_seconds = record.created - self.last_time
         # using timedelta here for convenient default formatting
         elapsed = timedelta(seconds=np.ceil(elapsed_seconds))  # ceil to not display microseconds
-        return "{} {}".format(elapsed, record.getMessage())
+        return "{} {}: {}".format(elapsed, record.name, record.getMessage())
 
 
 class Proc_Queue(deque):

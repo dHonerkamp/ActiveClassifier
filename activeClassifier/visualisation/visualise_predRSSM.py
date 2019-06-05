@@ -1,11 +1,11 @@
+import logging
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 
-import logging
-logging.getLogger()
+logger = logging.getLogger()
 
 from visualisation.base import Base, visualisation_level
 from tools.utility import softmax

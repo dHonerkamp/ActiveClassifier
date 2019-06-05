@@ -47,6 +47,7 @@ class ModelIntegrationTest(tf.test.TestCase):
     def setUpClass(cls):
         cls.FLAGS, cls.config = Utility.init(experiment_name='TEST')
 
+        # cut down runtime
         cls.FLAGS.num_epochs = 2
         cls.FLAGS.batch_size = 2
         cls.FLAGS.MC_samples = 1
@@ -60,6 +61,7 @@ class ModelIntegrationTest(tf.test.TestCase):
         # load datasets
         cls.train_data, cls.valid_data, cls.test_data = get_data(cls.FLAGS)
 
+        # cut down runtime
         cls.FLAGS.train_batches_per_epoch = 11
         cls.FLAGS.batches_per_eval_valid = 5
         cls.FLAGS.batches_per_eval_test = 5
@@ -91,6 +93,7 @@ class ModelIntegrationTest(tf.test.TestCase):
 
         for writer in writers.values():
             writer.close()
+
 
 if __name__ == '__main__':
     tf.test.main()

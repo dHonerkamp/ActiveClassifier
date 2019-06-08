@@ -292,7 +292,7 @@ class Visualization_predRSSM(Base):
         for t in range(ntax):
             for hyp in range(self.num_classes_kn):
                 is_hyp = (d['y'] == hyp)
-                if t < (ntax - 1):
+                if t < self.num_glimpses:
                     pre = 't{}: '.format(t) if (hyp == 0) else ''
                     fb_corr  = d['fb'][t, is_hyp, hyp]
                     fb_wrong = d['fb'][t, ~is_hyp, hyp]
@@ -307,7 +307,7 @@ class Visualization_predRSSM(Base):
 
             if self.uk_label is not None:
                 # right most: best fb across hyp for kn vs uk
-                if t < (ntax - 1):
+                if t < self.num_glimpses:
                     fb_kn = fb_kn_best[t]
                     fb_uk = fb_uk_best[t]
                 else:
@@ -327,16 +327,17 @@ class Visualization_predRSSM(Base):
         bins = 40
         f, axes = plt.subplots(ntax, 1, figsize=(4, 4 * self.num_glimpses), squeeze=False)
         top_believes = d['state_believes'].max(axis=2)  # [T+1, B, num_classes] -> [T+1, B]
+        top_believes_class = d['state_believes'].argmax(axis=2)  # [T+1, B, num_classes] -> [T+1, B]
 
-        is_corr = (d['y'] == d['clf'])
-        corr = top_believes[:, is_corr]
-        wrong = top_believes[:, ~is_corr]
+        is_corr = (top_believes_class == d['y'][np.newaxis, :])
+        corr = np.ma.masked_array(top_believes, is_corr)
+        wrong = np.ma.masked_array(top_believes, ~is_corr)
 
         for t in range(ntax):
-            if len(corr):
-                axes[t, 0].hist(corr[t+1], bins=bins, alpha=0.5, label='corr')
-            if len(wrong):
-                axes[t, 0].hist(wrong[t+1], bins=bins, alpha=0.5, label='wrong')
+            if corr[t+1].mask.any():
+                axes[t, 0].hist(corr[t+1].compressed(), bins=bins, alpha=0.5, label='corr')
+            if wrong[t+1].mask.any():
+                axes[t, 0].hist(wrong[t+1].compressed(), bins=bins, alpha=0.5, label='wrong')
             axes[t, 0].legend(loc='upper right')
             axes[t, 0].set_title('Top believes after glimpse {}'.format(t))
             axes[t, 0].set_xlim([0, 1])

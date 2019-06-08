@@ -1,3 +1,4 @@
+import numpy as np
 import tensorflow as tf
 
 
@@ -57,14 +58,28 @@ class PolicyNetwork:
         return loc_losses
 
     def random_loc(self, rng=1., shp=None):
-        rng = min(rng, self.max_loc_rng)
         with tf.name_scope(self.name):
+            rng = min(rng, self.max_loc_rng)
             if shp is None:
                 shp = [self.B, self.loc_dim]
             else:
                 shp = shp + [self.loc_dim]
             loc = tf.random_uniform(shp, minval=rng * -1., maxval=rng * 1.)
+        return loc, loc
 
+    def uniform_loc_10(self, n_policies):
+        """Spread out locations for evaluation, for n_policies=10"""
+        assert n_policies == 10
+
+        with tf.name_scope(self.name):
+            loc = []
+            loc.append([-1., -1.])  # a corner
+            row = [-0.5, 0., 0.5]
+            for i in row:
+                for j in row:
+                    loc.append([i, j])
+            loc = tf.constant(loc)
+            loc = tf.tile(loc[tf.newaxis, :, :], [self.B, 1, 1])
         return loc, loc
 
     def inital_loc(self):

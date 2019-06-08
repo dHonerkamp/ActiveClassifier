@@ -156,7 +156,8 @@ class ActInfPlanner(Base):
             next_actions, next_actions_mean = self.m['policyNet'].next_actions(inputs=inputs, is_training=is_training, n_policies=self.n_policies)  # [B, n_policies, loc_dim]
 
             next_actions, next_actions_mean = tf.cond(rnd_loc_eval,
-                                                      lambda: self.m['policyNet'].random_loc(shp=[self.B, self.n_policies] if (self.n_policies > 1) else [self.B]),
+                                                      # lambda: self.m['policyNet'].random_loc(shp=[self.B, self.n_policies] if (self.n_policies > 1) else [self.B]),
+                                                      lambda: self.m['policyNet'].uniform_loc_10(self.n_policies) if (self.n_policies > 1) else self.m['policyNet'].random_loc(shp=[self.B]),
                                                       lambda: (next_actions, next_actions_mean),
                                                       name='rnd_loc_eval_cond')
 

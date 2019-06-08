@@ -82,9 +82,9 @@ def training_loop(FLAGS, sess, model, handles, writers, phase):
     feeds = model.get_feeds(FLAGS, handles)
     visual = Visualization_predRSSM(model, FLAGS)
 
-    if FLAGS.debug:
-        max_processes = 0
-    elif (sys.platform == 'win32'):
+    # if FLAGS.debug:
+    #     max_processes = 0
+    if (sys.platform == 'win32'):
         max_processes = 1
     else:
         max_processes = 4

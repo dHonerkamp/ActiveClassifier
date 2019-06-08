@@ -8,73 +8,74 @@ from tools.tf_tools import repeat_axis, binary_entropy, differential_entropy_nor
 class ActInfPlanner(Base):
     def __init__(self, FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition, C):
         super().__init__(FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition)
-        self.max_glimpses = FLAGS.num_glimpses
         self.n_policies = 1 if FLAGS.rl_reward == 'G1' else FLAGS.num_classes_kn
         self.num_classes_kn = FLAGS.num_classes_kn
-        self.z_dist = FLAGS.z_dist
+        self.FE_dist = 'B' if FLAGS.use_pixel_obs_FE else FLAGS.z_dist
+        self.use_pixel_obs_FE = FLAGS.use_pixel_obs_FE
+        self.pixel_obs_discrete = FLAGS.pixel_obs_discrete
+        self.exp_obs_shape = self.m['VAEDecoder'].output_shape if self.use_pixel_obs_FE else self.m['VAEEncoder'].output_shape
         self.B = batch_sz
         self.C = C
         self.alpha = FLAGS.precision_alpha
-        self.rl_reward = FLAGS.rl_reward
 
         # No need to tile at every step
         self.hyp = self._hyp_tiling(FLAGS.num_classes_kn, self.B * self.n_policies)  # [B * n_policies * hyp, num_classes]
         self.policy_dep_input = self._hyp_tiling(self.num_classes_kn, self.B)  # [B * hyp, num_classes]
 
     @staticmethod
-    def _binary_entropy_agg(logits):
+    def _discrete_entropy_agg(d, logits=None, probs=None):
         # TODO: DOES MEAN MAKE SENSE? (at least better than sum, as indifferent to size_z)
-        H = binary_entropy(logits=logits)  # [B * n_policies * hyp, z]
-        return tf.reduce_mean(H, axis=-1)  # [B * n_policies * hyp]
+        if d == 'B':
+            dist = tfd.Bernoulli(logits=logits, probs=probs)
+        elif d == 'Cat':
+            dist = tfd.Categorical(logits=logits, probs=probs)
+        H = dist.entropy()
+        return tf.reduce_mean(H, axis=-1)  # [B, n_policies, hyp]
 
-    def _exp_H(self, exp_obs_mu, exp_obs_sigma, c_believes=None, c_believes_tiled=None):
+    @staticmethod
+    def _believe_weighted_expecation(probs, believes=None, believes_tiled=None):
+        if (believes is None) == (believes_tiled is None):
+            raise ValueError('Provide either c_believes or c_believes_tiled')
+
+        if believes is not None:
+            exp_probs = tf.einsum('bh,bkhg->bkg', believes, probs)  # [B, n_policies, glimpse]
+        else:
+            exp_probs = tf.einsum('bkh,bkhg->bkg', believes_tiled, probs)  # [B, n_policies, glimpse]
+        return exp_probs
+
+    def calc_G_obs_prePreferences(self, exp_obs_logits, exp_obs_sigma, c_believes=None, c_believes_tiled=None):
         """
         Args:
-            exp_obs_mu, exp_obs_sigma: [B, n_policies, hyp, glimpse]
+            exp_obs: dict with variable of shape [B, n_policies, hyp, glimpse]
             c_believes: [B, hyp]
-        Returns:
-            exp_H: [B, n_policies]
-        """
-        assert (c_believes is None) or (c_believes_tiled is None)
-        # TODO: HOW TO DEFINE ENTROPY OVER INDEPENDENT BERNOULLI (WITHOUT EXPLODING COMBINATORICS) OR NORMAL DIST
-        if self.z_dist == 'B':
-            H = self._binary_entropy_agg(logits=exp_obs_mu)  # [B, n_policies, hyp]
-        elif self.z_dist == 'N':
-            H = differential_entropy_diag_normal(exp_obs_sigma)  # [B, n_policies, hyp]
-        else:
-            raise ValueError('Unknown z_dist: {}'.format(self.z_dist))
-        if c_believes is not None:
-            c_believes_tiled = c_believes[:, tf.newaxis, :]  # [B, hyp] -> [B, 1, hyp] -> broadcasting into [B, n_policies, hyp]
-        exp_H = tf.reduce_sum(c_believes_tiled * H, axis=2)  # [B, n_policies]
-        return exp_H
-
-    def _H_exp_exp(self, exp_obs, c_believes=None, c_believes_tiled=None):
-        assert (c_believes is None) or (c_believes_tiled is None)
-        if c_believes is not None:
-            exp_exp_obs = tf.einsum('bh,bkhg->bkg', c_believes, exp_obs)  # [B, n_policies, glimpse]
-        else:
-            exp_exp_obs = tf.einsum('bkh,bkhg->bkg', c_believes_tiled, exp_obs)  # [B, n_policies, glimpse]
-
-        if self.z_dist == 'B':
-            H_exp_exp_obs = self._binary_entropy_agg(logits=exp_exp_obs)  # [B, n_policies]
-        else:
-            # TODO: HOW TO DO THIS FOR NORMAL DISTRIBUTED CODE?
-            raise ValueError('H_exp_exp not implemented for this distribution: {}'.format(self.z_dist))
-        return H_exp_exp_obs, exp_exp_obs
-
-    def calc_G_obs_prePreferences(self, exp_obs, exp_obs_sigma, c_believes=None, c_believes_tiled=None):
-        """
-        Args:
-            exp_obs_mu, exp_obs_sigma: [B, n_policies, hyp, glimpse]
-            c_believes: [B, hyp]
+            c_believes_tiled: [B, n_policies, hyp]
         Returns:
             G, exp_exp_obs, exp_H, H_exp_exp_obs: [B, n_policies]
         """
         # expected entropy
-        assert (c_believes is None) or (c_believes_tiled is None)
-        exp_H = self._exp_H(exp_obs, exp_obs_sigma, c_believes, c_believes_tiled)
-        # Entropy of the expectation
-        H_exp_exp_obs, exp_exp_obs = self._H_exp_exp(exp_obs, c_believes, c_believes_tiled)
+        if (c_believes is None) == (c_believes_tiled is None):
+            raise ValueError('Provide either c_believes or c_believes_tiled')
+
+        if self.pixel_obs_discrete:
+            H = self._discrete_entropy_agg(logits=exp_obs_logits, d='Cat')  # [B, n_policies, hyp]
+            exp_obs = tf.nn.softmax(exp_obs_logits)  # Cannot take the expectation on the logits due to nonlinearity of sigmoid!
+            exp_obs = tf.reshape(exp_obs, [self.B, self.n_policies, self.num_classes_kn, -1])
+            exp_exp_obs = self._believe_weighted_expecation(exp_obs, c_believes, c_believes_tiled)  # [B, n_policies, glimpse]
+            exp_exp_obs = tf.reshape(exp_exp_obs, [self.B, self.n_policies] + self.exp_obs_shape)
+            H_exp_exp_obs = self._discrete_entropy_agg(probs=exp_exp_obs, d='Cat')  # [B, n_policies]
+        elif self.FE_dist == 'B':
+            H = self._discrete_entropy_agg(logits=exp_obs_logits, d='B')  # [B, n_policies, hyp]
+            exp_obs = tf.nn.sigmoid(exp_obs_logits)  # Cannot take the expectation on the logits due to nonlinearity of sigmoid!
+            exp_exp_obs = self._believe_weighted_expecation(exp_obs, c_believes, c_believes_tiled)  # [B, n_policies, glimpse]
+            H_exp_exp_obs = self._discrete_entropy_agg(probs=exp_exp_obs, d='B')  # [B, n_policies]
+        elif self.FE_dist == 'N':
+            H = differential_entropy_diag_normal(exp_obs_sigma)  # [B, n_policies, hyp]
+            raise ValueError('Not fully implemented yet')
+
+        if c_believes is not None:
+            c_believes_tiled = c_believes[:, tf.newaxis, :]  # [B, hyp] -> [B, 1, hyp] -> broadcasting into [B, n_policies, hyp]
+        exp_H = tf.reduce_sum(c_believes_tiled * H, axis=2)  # [B, n_policies]
+
         G = H_exp_exp_obs - exp_H
         return G, exp_exp_obs, exp_H, H_exp_exp_obs
 
@@ -109,10 +110,10 @@ class ActInfPlanner(Base):
         dec = tf.equal(selected_action_idx, self.n_policies)  # the last action is the decision
         selected_action_idx = tf.where(tf.stop_gradient(dec), tf.fill([self.B], 0), selected_action_idx)  # replace decision indeces (which exceed the shape of selected_action), so we can use gather on the locations
 
-        decision = tf.cond(tf.equal(time, self.max_glimpses - 1),
+        decision = tf.cond(tf.equal(time, self.num_glimpses - 1),
                            lambda: best_belief,  # always take a decision at the last time step
                            lambda: tf.where(dec, best_belief, tf.fill([self.B], -1)),
-                           name='last_timestep_decision_cond')
+                           name='last_t_decision_cond')
 
         if self.n_policies == 1:
             selected_action, selected_action_mean = next_actions, next_actions_mean
@@ -123,10 +124,9 @@ class ActInfPlanner(Base):
             selected_action      = tf.gather_nd(next_actions, coords)
             selected_action_mean = tf.gather_nd(next_actions_mean, coords)
             selected_exp_obs     = {k: tf.gather_nd(v, coords) if (v is not None) else None for k, v in exp_obs_prior.items()}  # [B, num_classes_kn, -1] as n_policies get removed in gather_nd
-        return decision, selected_action, selected_action_mean, selected_exp_obs
+        return decision, selected_action, selected_action_mean, selected_exp_obs, selected_action_idx
 
-
-    def planning_step(self, current_state, z_samples, time, is_training):
+    def planning_step(self, current_state, z_samples, time, is_training, rnd_loc_eval):
         """Perform one planning step.
         Args:
             current state
@@ -144,16 +144,21 @@ class ActInfPlanner(Base):
                 inputs = [repeat_axis(current_state['s'], axis=0, repeats=self.num_classes_kn), self.policy_dep_input]
             elif self.rl_reward == 'G':
                 assert self.n_policies == self.num_classes_kn
-                boosted_hyp = repeat_axis(current_state['c'], axis=0, repeats=self.n_policies)
-                # increase each 'hypothesis'-policy by 50%
+                boosted_hyp = repeat_axis(current_state['c'], axis=0, repeats=self.n_policies)  # [B * n_policies, num_classes]
+                # increase each 'hypothesis'-policy by 50% and renormalise
                 boosted_hyp += self.policy_dep_input * boosted_hyp * 0.5
                 def re_normalise(x, axis=-1):
-                    return x / tf.reduce_sum(x, axis=axis)
+                    return x / tf.reduce_sum(x, axis=axis, keep_dims=True)
                 boosted_hyp = re_normalise(boosted_hyp, axis=-1)
                 inputs = [repeat_axis(current_state['s'], axis=0, repeats=self.n_policies), boosted_hyp]
             else:
                 raise ValueError('Unknown policy strategies', 'n_policies: {}, rl_reward: {}'.format(self.n_policies, self.rl_reward))
-            next_actions, next_actions_mean = self.m['policyNet'].next_actions(inputs=inputs, is_training=is_training, n_policies=self.n_policies)
+            next_actions, next_actions_mean = self.m['policyNet'].next_actions(inputs=inputs, is_training=is_training, n_policies=self.n_policies)  # [B, n_policies, loc_dim]
+
+            next_actions, next_actions_mean = tf.cond(rnd_loc_eval,
+                                                      lambda: self.m['policyNet'].random_loc(shp=[self.B, self.n_policies] if (self.n_policies > 1) else [self.B]),
+                                                      lambda: (next_actions, next_actions_mean),
+                                                      name='rnd_loc_eval_cond')
 
             # action specific state transition
             new_state = self.stateTransition([z_samples, next_actions], current_state)
@@ -163,26 +168,43 @@ class ActInfPlanner(Base):
                 # TODO: THIS MIGHT HAVE TO CHANGE IF POLICIES DEPEND ON CLASS-CONDITIONAL Z
                 new_l_tiled = repeat_axis(tf.reshape(new_state['l'], [self.B * self.n_policies, self.loc_dim]),
                                           axis=0, repeats=self.num_classes_kn)  # [B, n_policies, loc] -> [B * n_policies, loc] -> [B * n_policies * hyp, loc]
+                exp_obs_prior_enc = self.m['VAEEncoder'].calc_prior([self.hyp, new_s_tiled, new_l_tiled],
+                                                                    out_shp=[self.B, self.n_policies, self.num_classes_kn])
+                if not self.use_pixel_obs_FE:
+                    exp_obs_prior_logits = exp_obs_prior_enc['mu']
+                    exp_obs_prior_sigma = exp_obs_prior_enc['sigma']
+                    sample = exp_obs_prior_enc['sample']
+                else:
+                    exp_obs_prior = self.m['VAEDecoder'].decode([tf.reshape(exp_obs_prior_enc['sample'], [-1] + self.m['VAEEncoder'].output_shape), new_l_tiled],
+                                                                out_shp=[self.B, self.n_policies, self.num_classes_kn])
+                    exp_obs_prior_logits = exp_obs_prior['mu_logits']
+                    exp_obs_prior_sigma = exp_obs_prior['sigma']
+                    sample = exp_obs_prior['sample']
 
-                exp_obs_prior = self.m['VAEEncoder'].calc_prior([self.hyp, new_s_tiled, new_l_tiled],
-                                                                out_shp=[self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size])
-
-            G_obs, exp_exp_obs, exp_H, H_exp_exp_obs = self.calc_G_obs_prePreferences(exp_obs_prior['mu'], exp_obs_prior['sigma'], new_state['c'])
+            G_obs, exp_exp_obs, exp_H, H_exp_exp_obs = self.calc_G_obs_prePreferences(exp_obs_prior_logits, exp_obs_prior_sigma, c_believes=new_state['c'])
             # For all non-decision actions the probability of classifying is 0, hence the probability of an observation is 1
             preference_error_obs = 1. * self.C[time, 0]
             G_obs += preference_error_obs
             # decision actions
             G_dec = self._G_decision(time, new_state['c'])
             G = tf.concat([G_obs, G_dec[:, tf.newaxis]], axis=1)
-            # G = tf.Print(G, [time, 'H', tf.reduce_mean(exp_H), 'Hexpexp', tf.reduce_mean(H_exp_exp_obs), 'ext', tf.reduce_mean(preference_error), 'G', tf.reduce_mean(G, axis=0)], summarize=30)
 
             # action selection
-            decision, selected_action, selected_action_mean, selected_exp_obs = self._action_selection(next_actions, next_actions_mean, new_state, G, exp_obs_prior, time, is_training)
+            decision, selected_action, selected_action_mean, selected_exp_obs_enc, selected_action_idx = self._action_selection(next_actions, next_actions_mean, new_state, G, exp_obs_prior_enc, time, is_training)
+
+            if self.rl_reward == 'G':
+                boosted_hyp = tf.reshape(boosted_hyp, [self.B, self.n_policies, self.num_classes_kn])
+                rewards_Gobs, _, rewards_exp_H, rewards_H_exp_exp_obs = self.calc_G_obs_prePreferences(exp_obs_prior_logits, exp_obs_prior_sigma, c_believes_tiled=boosted_hyp)
+                r = rewards_Gobs
+            else:
+                r = tf.zeros([self.B, self.n_policies])
 
         records = {'G'                : G,
-                   'exp_obs'          : exp_obs_prior['mu'],  # [B, n_policies, num_classes, z]
+                   'exp_obs'          : sample,  # [B, n_policies, num_classes, z]
                    'exp_exp_obs'      : exp_exp_obs,  # [B, n_policies, z]
                    'H_exp_exp_obs'    : H_exp_exp_obs,
                    'exp_H'            : exp_H,
-                   'potential_actions': next_actions[:, tf.newaxis, :] if (self.n_policies == 1) else next_actions}
-        return decision, selected_action, selected_action_mean, selected_exp_obs, records
+                   'potential_actions': next_actions[:, tf.newaxis, :] if (self.n_policies == 1) else next_actions,
+                   'selected_action_idx': selected_action_idx,
+                   'rewards_Gobs'     : r}
+        return decision, selected_action, selected_action_mean, selected_exp_obs_enc, records

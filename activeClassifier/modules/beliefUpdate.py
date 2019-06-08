@@ -17,6 +17,7 @@ class BeliefUpdate:
         self.z_dist = FLAGS.z_dist
         self.z_B_kl = FLAGS.z_B_kl
         self.z_kl_weight = FLAGS.z_kl_weight
+        self.debug = FLAGS.debug
 
         self.uk_cycling = FLAGS.uk_cycling
         if self.uk_cycling:
@@ -82,15 +83,15 @@ class BeliefUpdate:
         if self.z_dist == 'N':
             post_sigma = tf.tile(z_post['sigma'][:, tf.newaxis, :], [1, self.num_classes_kn, 1])
 
-            dist_prior = tfd.Normal(loc=z_prior['mu'], scale=z_prior['sigma'])
-            dist_post = tfd.Normal(loc=post_mu, scale=post_sigma)
+            dist_prior = tfd.Normal(loc=z_prior['mu'], scale=z_prior['sigma'], allow_nan_stats=~self.debug)
+            dist_post = tfd.Normal(loc=post_mu, scale=post_sigma, allow_nan_stats=~self.debug)
             KLdiv = dist_post.kl_divergence(dist_prior)  # [B, hyp, z]
         elif self.z_dist == 'B':
             if self.z_B_kl in [20, 212]:
                 # Monte carlo approximation on the logistic node (a true lower bound but can exhibit higher variance)
                 post_log_sample = tf.tile(z_post['log_sample'][:, tf.newaxis, :], [1, self.num_classes_kn, 1])
-                dist_prior = pseudo_LogRelaxedBernoulli(logits=z_prior['mu'], temperature=self.m['VAEEncoder'].temp_prior)
-                dist_post  = pseudo_LogRelaxedBernoulli(logits=post_mu, temperature=self.m['VAEEncoder'].temp_post)
+                dist_prior = pseudo_LogRelaxedBernoulli(logits=z_prior['mu'], temperature=self.m['VAEEncoder'].temp_prior, allow_nan_stats=~self.debug)
+                dist_post  = pseudo_LogRelaxedBernoulli(logits=post_mu, temperature=self.m['VAEEncoder'].temp_post, allow_nan_stats=~self.debug)
                 KLdiv = dist_post.log_prob(post_log_sample) - dist_prior.log_prob(post_log_sample)  # [B, hyp, z]
                 if self.z_B_kl == 212:
                     # slightly different relaxation from equation 21, but seemed to learn quite well
@@ -106,8 +107,8 @@ class BeliefUpdate:
                 KLdiv = pseudo_kl(post_mu, z_prior['mu'], z_logits=post_log_sample)
             elif self.z_B_kl == 22:
                 # replace discrete mass with the analytic discrete KL: not a true lower bound, be aware of overfitting on spurious elements in this 'KL'
-                dist_prior = tfd.Bernoulli(logits=z_prior['mu'])
-                dist_post = tfd.Bernoulli(logits=post_mu)
+                dist_prior = tfd.Bernoulli(logits=z_prior['mu'], allow_nan_stats=~self.debug)
+                dist_post = tfd.Bernoulli(logits=post_mu, allow_nan_stats=~self.debug)
                 KLdiv = dist_post.kl_divergence(dist_prior)  # [B, hyp, z]
             else:
                 raise ValueError('Unknown z_B_kl: {}'.format(self.z_B_kl))

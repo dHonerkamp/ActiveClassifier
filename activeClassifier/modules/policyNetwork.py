@@ -2,7 +2,7 @@ import tensorflow as tf
 
 
 class PolicyNetwork:
-    def __init__(self, FLAGS, batch_sz, n_policies, name='LocationNetwork'):
+    def __init__(self, FLAGS, batch_sz, name='LocationNetwork'):
         self.name = name
         self.max_loc_rng = FLAGS.max_loc_rng
         self.init_loc_rng = FLAGS.init_loc_rng
@@ -49,19 +49,28 @@ class PolicyNetwork:
             # only want gradients flow through the suggested mean
             # includes first location, but irrelevant for gradients as not depending on parameters
             z = (tf.stop_gradient(locs) - loc_means) / self.std  # [T, batch_sz, loc_dims]
-            loc_loglik = -0.5 * tf.reduce_mean(tf.square(z), axis=2)  # not using reduce_sum as number of glimpses can differ
+            loc_loglik = -0.5 * tf.reduce_mean(tf.square(z), axis=-1)
 
             # do not propagate back through advantages
             loc_losses = -1. * loc_loglik * tf.stop_gradient(advantages)
 
         return loc_losses
 
-    def random_loc(self, rng=1.):
+    def random_loc(self, rng=1., shp=None):
         rng = min(rng, self.max_loc_rng)
         with tf.name_scope(self.name):
-            loc = tf.random_uniform([self.B, self.loc_dim], minval=rng * -1., maxval=rng * 1.)
+            if shp is None:
+                shp = [self.B, self.loc_dim]
+            else:
+                shp = shp + [self.loc_dim]
+            loc = tf.random_uniform(shp, minval=rng * -1., maxval=rng * 1.)
 
         return loc, loc
 
     def inital_loc(self):
         return self.random_loc(rng=self.init_loc_rng)
+
+    @property
+    def output_size(self):
+        return self.loc_dim
+

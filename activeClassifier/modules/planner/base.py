@@ -9,16 +9,19 @@ class Base:
         self.num_classes = FLAGS.num_classes
         self.num_classes_kn = FLAGS.num_classes_kn
         self.uk_label = FLAGS.uk_label
+        self.num_glimpses = FLAGS.num_glimpses
         self.size_z = FLAGS.size_z
         self.loc_dim = FLAGS.loc_dim
         self.patch_shape_flat = patch_shape_flat
         self.stateTransition = stateTransition
+        self.rl_reward = FLAGS.rl_reward
         self.m = submodules
 
-    def random_policy(self):
-        return [tf.fill([self.B], -1)] + list(self.m['policyNet'].random_loc()) + [self.zero_records]
+    def random_policy(self, rng=1.):
+        rnd_loc, rnd_loc = self.m['policyNet'].random_loc(rng)
+        return tf.fill([self.B], -1), rnd_loc, rnd_loc, self.zero_records
 
-    def planning_step(self, current_state, z_samples, time, is_training):
+    def planning_step(self, current_state, z_samples, time, is_training, rnd_loc_eval):
         return
 
     def _best_believe(self, state):
@@ -42,23 +45,24 @@ class Base:
         new_s_tiled = repeat_axis(state['s'], axis=0, repeats=self.num_classes_kn)  # [B, rnn] -> [B * hyp, rnn]
         new_l_tiled = repeat_axis(state['l'], axis=0, repeats=self.num_classes_kn)  # [B, loc] -> [B * hyp, loc]
 
-        exp_obs = self.m['VAEEncoder'].calc_prior([hyp, new_s_tiled, new_l_tiled], out_shp=[self.B, self.num_classes_kn, self.m['VAEEncoder'].output_size])
-
-        return exp_obs
+        exp_obs_enc = self.m['VAEEncoder'].calc_prior([hyp, new_s_tiled, new_l_tiled], out_shp=[self.B, self.num_classes_kn])
+        return exp_obs_enc
 
     def initial_planning(self):
         selected_action, selected_action_mean = self.m['policyNet'].inital_loc()
         new_state = self.stateTransition.initial_state(self.B, selected_action)
-        selected_exp_obs = self.single_policy_prediction(new_state)  # [B, num_classes, m['VAEEncoder'].output_size]
+        selected_exp_obs_enc = self.single_policy_prediction(new_state)  # [B, num_classes, m['VAEEncoder'].output_size]
         decision = tf.fill([self.B], -1)
 
-        return new_state, decision, selected_action, selected_action_mean, selected_exp_obs, self.zero_records
+        return new_state, decision, selected_action, selected_action_mean, selected_exp_obs_enc, self.zero_records
 
     @property
     def zero_records(self):
         return {'G'                : tf.zeros([self.B, self.n_policies + 1]),
-                'exp_obs'          : tf.zeros([self.B, self.n_policies, self.num_classes_kn, self.m['VAEEncoder'].output_size]),
-                'exp_exp_obs'      : tf.zeros([self.B, self.n_policies, self.m['VAEEncoder'].output_size]),
+                'exp_obs'          : tf.zeros([self.B, self.n_policies, self.num_classes_kn] + self.exp_obs_shape),
+                'exp_exp_obs'      : tf.zeros([self.B, self.n_policies] + self.exp_obs_shape),
                 'H_exp_exp_obs'    : tf.zeros([self.B, self.n_policies]),
                 'exp_H'            : tf.zeros([self.B, self.n_policies]),
-                'potential_actions': tf.zeros([self.B, self.n_policies, self.loc_dim])}
+                'potential_actions': tf.zeros([self.B, self.n_policies, self.loc_dim]),
+                'selected_action_idx': tf.zeros([self.B], dtype=tf.int32),
+                'rewards_Gobs'     : tf.zeros([self.B, self.n_policies])}

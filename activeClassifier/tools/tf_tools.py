@@ -65,10 +65,6 @@ def differential_entropy_diag_normal(sigma, axis=-1):
     return entr
 
 
-def write_zero_out(time, ta, candidate, done):
-    return ta.write(time, tf.where(done, tf.zeros_like(candidate), candidate))
-
-
 def repeat_axis(x, axis, repeats):
     shp = x.shape.as_list()
 
@@ -127,8 +123,8 @@ def exponential_mov_avg(tracked_var, avg_var, decay):
     return decay * avg_var + (1 - decay) * tracked_var
 
 
-def pseudo_LogRelaxedBernoulli(logits, temperature):
-    return Logistic(loc=logits / temperature, scale=1 / temperature)
+def pseudo_LogRelaxedBernoulli(logits, temperature, allow_nan_stats=True):
+    return Logistic(loc=logits / temperature, scale=1 / temperature, allow_nan_stats=allow_nan_stats)
 
 
 # def LogRelaxedBernoulli_logprob(y, logits, temperature):

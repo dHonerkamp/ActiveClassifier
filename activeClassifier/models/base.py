@@ -10,6 +10,7 @@ class Base:
         self.global_epoch = self.global_step // FLAGS.train_batches_per_epoch
         self.total_steps = FLAGS.num_epochs * FLAGS.train_batches_per_epoch
         self.epoch_num = self.global_step // FLAGS.train_batches_per_epoch
+        self.debug = FLAGS.debug
 
         with tf.name_scope('Placeholder'):
             self.is_training = tf.placeholder(tf.bool, shape=(), name='is_training')

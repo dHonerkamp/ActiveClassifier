@@ -152,7 +152,7 @@ class predRSSM(base.Base):
                     if FLAGS.debug: print(time, k, v.shape)
                     ta_d[k] = self._write_zero_out(time, ta_d[k], v, done, k)
                 ta_d['current_c'] = self._write_zero_out(time + 1, ta_d['current_c'], current_state['c'], last_done, 'current_c')  # ONLY ONE t=0 TO T
-                ta_d['uk_belief'] = self._write_zero_out(time, ta_d['uk_belief'], current_state['uk_belief'], last_done, 'uk_belief')  # ONLY ONE t=0 TO T
+                ta_d['uk_belief'] = self._write_zero_out(time, ta_d['uk_belief'], current_state['uk_belief'], last_done, 'uk_belief')
                 # copy forward
                 classification_decision = tf.where(last_done, last_decision, next_decision)
                 last_decision = tf.where(last_done, last_decision, next_decision)

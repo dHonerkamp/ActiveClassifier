@@ -330,8 +330,8 @@ class Visualization_predRSSM(Base):
         top_believes_class = d['state_believes'].argmax(axis=2)  # [T+1, B, num_classes] -> [T+1, B]
 
         is_corr = (top_believes_class == d['y'][np.newaxis, :])
-        corr = np.ma.masked_array(top_believes, is_corr)
-        wrong = np.ma.masked_array(top_believes, ~is_corr)
+        corr = np.ma.masked_array(top_believes, mask=~is_corr)
+        wrong = np.ma.masked_array(top_believes, mask=is_corr)
 
         for t in range(ntax):
             if corr[t+1].mask.any():
@@ -339,7 +339,7 @@ class Visualization_predRSSM(Base):
             if wrong[t+1].mask.any():
                 axes[t, 0].hist(wrong[t+1].compressed(), bins=bins, alpha=0.5, label='wrong')
             axes[t, 0].legend(loc='upper right')
-            axes[t, 0].set_title('Top believes after glimpse {}'.format(t))
+            axes[t, 0].set_title('Top believes after glimpse {}'.format(t+1))
             axes[t, 0].set_xlim([0, 1])
 
         self._save_fig(f, 'c', '{}{}.png'.format(self.prefix, suffix))

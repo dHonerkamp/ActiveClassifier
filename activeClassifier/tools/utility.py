@@ -53,6 +53,11 @@ class Utility(object):
         if not FLAGS.use_pixel_obs_FE:
             assert (FLAGS.pixel_obs_discrete == 0)
 
+        if FLAGS.uniform_loc10:
+            assert FLAGS.planner == 'ActInf'
+            assert FLAGS.rl_reward in ['clf', 'G']
+            assert ~FLAGS.rnd_first_glimpse  # not completely necessary, but seems to make sense
+
         # not including any potential unknown class (adjusted in get_data)
         FLAGS.num_classes_kn = FLAGS.num_classes
         # Label representing unknowns (adjusted in get_data)
@@ -76,7 +81,9 @@ class Utility(object):
     def set_exp_name(FLAGS):
         experiment_name  = '{}gl_{}_{}_bs{}_MC{}_'.format(FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples)
         experiment_name += 'lr{}dc{}_'.format(FLAGS.learning_rate, FLAGS.learning_rate_decay_factor)
-        experiment_name += '{}sc{}_lstd{}to{}Rng{}_glstd{}_'.format(len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.loc_std, FLAGS.loc_std_min, FLAGS.init_loc_rng, FLAGS.gl_std)
+        experiment_name += '{}sc{}_glstd{}_'.format(len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.gl_std)
+        experiment_name += '1stGlRnd_' if FLAGS.rnd_first_glimpse else ''
+        experiment_name += 'lstd{}to{}Rng{}_'.format(FLAGS.loc_std, FLAGS.loc_std_min, FLAGS.init_loc_rng) if not FLAGS.uniform_loc10 else 'uniformLoc10'
         experiment_name += 'preTr{}{}uk{}_'.format(FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk) if FLAGS.pre_train_epochs else ''
         experiment_name += 'z{sz}{d}{kl}C{c}w{w}_fbN{n}'.format(sz=FLAGS.size_z, d=FLAGS.z_dist, kl=FLAGS.z_B_kl, c=FLAGS.z_B_center, w=FLAGS.z_kl_weight, n=FLAGS.normalise_fb)
         if FLAGS.use_conv:
@@ -140,6 +147,7 @@ class Utility(object):
         parser.add_argument('--freeze_policyNet', type=int, default=None, help='Number of epochs after which to freeze the policyNet weights. Set to None to ignore.')
         # locations
         parser.add_argument('--rnd_first_glimpse', type=int, default=1, choices=[0, 1], help='Whether to start with a random glimpse or plan it.')
+        parser.add_argument('--uniform_loc10', type=int, default=0, choices=[0, 1], help='Dont learn locations, instead always select from 10 evenly distributed ones. Only for ActInf planner.')
         parser.add_argument('--max_loc_rng', type=float, default=1., help='In what range are the locations allowed to fall? (Max. is -1 to 1)')
         parser.add_argument('--loc_std', type=float, default=0.09, help='Std used to sample locations. Relative to whole image being in range (-1, 1).')
         parser.add_argument('--loc_std_min', type=float, default=0.09, help='Minimum loc_std, decaying exponentially (hardcoded decay rate).')

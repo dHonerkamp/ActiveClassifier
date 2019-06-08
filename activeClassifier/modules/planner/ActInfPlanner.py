@@ -17,6 +17,7 @@ class ActInfPlanner(Base):
         self.B = batch_sz
         self.C = C
         self.alpha = FLAGS.precision_alpha
+        self.uniform_loc10 = FLAGS.uniform_loc10
 
         # No need to tile at every step
         self.hyp = self._hyp_tiling(FLAGS.num_classes_kn, self.B * self.n_policies)  # [B * n_policies * hyp, num_classes]
@@ -126,6 +127,20 @@ class ActInfPlanner(Base):
             selected_exp_obs     = {k: tf.gather_nd(v, coords) if (v is not None) else None for k, v in exp_obs_prior.items()}  # [B, num_classes_kn, -1] as n_policies get removed in gather_nd
         return decision, selected_action, selected_action_mean, selected_exp_obs, selected_action_idx
 
+    def _location_planning(self, inputs, is_training, rnd_loc_eval):
+        if self.uniform_loc10:
+            next_actions, next_actions_mean = self.m['policyNet'].uniform_loc_10(self.n_policies)
+        else:
+            next_actions, next_actions_mean = self.m['policyNet'].next_actions(inputs=inputs, is_training=is_training,
+                                                                               n_policies=self.n_policies)  # [B, n_policies, loc_dim]
+
+            next_actions, next_actions_mean = tf.cond(rnd_loc_eval,
+                                                      # lambda: self.m['policyNet'].random_loc(shp=[self.B, self.n_policies] if (self.n_policies > 1) else [self.B]),
+                                                      lambda: self.m['policyNet'].uniform_loc_10(self.n_policies) if (self.n_policies > 1) else self.m['policyNet'].random_loc(shp=[self.B]),
+                                                      lambda: (next_actions, next_actions_mean),
+                                                      name='rnd_loc_eval_cond')
+        return next_actions, next_actions_mean
+
     def planning_step(self, current_state, z_samples, time, is_training, rnd_loc_eval):
         """Perform one planning step.
         Args:
@@ -153,13 +168,9 @@ class ActInfPlanner(Base):
                 inputs = [repeat_axis(current_state['s'], axis=0, repeats=self.n_policies), boosted_hyp]
             else:
                 raise ValueError('Unknown policy strategies', 'n_policies: {}, rl_reward: {}'.format(self.n_policies, self.rl_reward))
-            next_actions, next_actions_mean = self.m['policyNet'].next_actions(inputs=inputs, is_training=is_training, n_policies=self.n_policies)  # [B, n_policies, loc_dim]
 
-            next_actions, next_actions_mean = tf.cond(rnd_loc_eval,
-                                                      # lambda: self.m['policyNet'].random_loc(shp=[self.B, self.n_policies] if (self.n_policies > 1) else [self.B]),
-                                                      lambda: self.m['policyNet'].uniform_loc_10(self.n_policies) if (self.n_policies > 1) else self.m['policyNet'].random_loc(shp=[self.B]),
-                                                      lambda: (next_actions, next_actions_mean),
-                                                      name='rnd_loc_eval_cond')
+            # select locations to evaluate
+            next_actions, next_actions_mean = self._location_planning(inputs, is_training, rnd_loc_eval)
 
             # action specific state transition
             new_state = self.stateTransition([z_samples, next_actions], current_state)

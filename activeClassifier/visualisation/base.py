@@ -39,6 +39,7 @@ class Base:
         self.uk_label = FLAGS.uk_label
         self.lbl_map = FLAGS.class_remapping
         self.use_pixel_obs_FE = FLAGS.use_pixel_obs_FE
+        self.rnd_first_glimpse = FLAGS.rnd_first_glimpse
 
 
     def visualise(self, d, suffix=None, nr_obs_overview=8, nr_obs_reconstr=5):

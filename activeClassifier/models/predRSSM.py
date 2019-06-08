@@ -258,21 +258,26 @@ class predRSSM(base.Base):
                 self.loss = policy_loss + baseline_mse + beliefUpdate_loss + bl_surpise_mse + nll_post + KLdiv
 
         with tf.variable_scope('Optimizer'):
-            if policy == 'random':
+            def drop_vars(collection, to_drop):
+                return list(set(collection) - set(to_drop))
+
+            if (policy == 'random') or FLAGS.uniform_loc10:  # don't train locationNet or location baseline
                 pretrain_vars = (tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=VAEencoder.name)
                                  + tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=VAEdecoder.name)
                                  + stateTransition._cell.trainable_variables
                                  # + tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=beliefUpdate.name)
                                  )
-                print('Variables trained during pre-training:')
+                print('Variables trained:')
                 [print(v) for v in pretrain_vars]
+                print()
+                print('Variables excluded:')
+                excl = drop_vars(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), pretrain_vars)
+                [print (v) for v in excl]
+                assert len(excl) == 2  # baseline bias and kernel, policyNet never gets initialised
                 self.train_op, gradient_check_Pre, _ = self._create_train_op(FLAGS, self.loss, self.global_step, name='train_op_pretrain', varlist=pretrain_vars)
             else:
                 self.train_op, gradient_check_F, _ = self._create_train_op(FLAGS, self.loss, self.global_step, name='train_op_full')
 
-            def drop_vars(collection, to_drop):
-                return list(set(collection) - set(to_drop))
-                # return [v for v in collection if v not in to_drop]
             all_vars       = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
             excl_enc       = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='/'.join([VAEencoder.name, 'posterior']))
             excl_policyNet = (tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=policyNet.name)

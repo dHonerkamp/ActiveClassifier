@@ -4,7 +4,8 @@ import tensorflow as tf
 from models import base
 from tools.tf_tools import repeat_axis
 from modules.policyNetwork import PolicyNetwork
-from modules.VAE_predRSSM import Encoder, Decoder
+from modules.VAE.encoder import Encoder, EncoderConv
+from modules.VAE.decoder import Decoder
 from modules.planner.ActInfPlanner import ActInfPlanner
 from modules.planner.REINFORCEPlanner import REINFORCEPlanner
 from modules.stateTransition import StateTransition
@@ -37,7 +38,10 @@ class predRSSM(base.Base):
         # Initialise modules
         n_policies = FLAGS.num_classes_kn if FLAGS.planner == 'ActInf' else 1
         policyNet = PolicyNetwork(FLAGS, self.B)
-        VAEencoder   = Encoder(FLAGS, env.patch_shape, self.is_training)
+        if FLAGS.convLSTM:
+            VAEencoder   = EncoderConv(FLAGS, env.patch_shape, self.is_training)
+        else:
+            VAEencoder   = Encoder(FLAGS, env.patch_shape, self.is_training)
         VAEdecoder   = Decoder(FLAGS, env.patch_shape_flat)
         stateTransition = StateTransition(FLAGS, FLAGS.size_rnn)
         fc_baseline = tf.layers.Dense(10, name='fc_baseline') if FLAGS.rl_reward == 'G' else tf.layers.Dense(1, name='fc_baseline')

@@ -6,7 +6,10 @@ class StateTransition:
         self._num_classes = FLAGS.num_classes
         self._num_classes_kn = FLAGS.num_classes_kn
         self._loc_dim = FLAGS.loc_dim
-        self._cell = tf.nn.rnn_cell.GRUCell(rnn_units)
+        if FLAGS.convLSTM:
+            self._cell = tf.contrib.rnn.Conv2DLSTMCell(input_shape=(14, 14), output_channels=4, kernel_shape=(2, 2))
+        else:
+            self._cell = tf.nn.rnn_cell.GRUCell(rnn_units)
 
     def __call__(self, inputs, prev_state):
         """

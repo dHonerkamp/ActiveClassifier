@@ -2,7 +2,6 @@ import tensorflow as tf
 from tensorflow import distributions as tfd
 
 from tools.tf_tools import FiLM_layer, pseudo_LogRelaxedBernoulli, exponential_mov_avg
-from tools.MSE_distribution import MSEDistribution
 
 
 class Encoder:
@@ -52,6 +51,14 @@ class Encoder:
                 mu = tf.identity(mu)
         return mu
 
+    def _unflatten_glimpse(self, glimpse):
+        """
+        Glimpse is flattened[batch_sz, num_scales, H, W, C].
+        Bring into[B, num_scales * scale_sz[0], scale_sz[0], C] (retina scales stacked vertically)
+        """
+        shp = [tf.shape(glimpse)[0]] + [self.patch_shape[0] * self.patch_shape[1], self.patch_shape[2], self.patch_shape[3]]
+        return tf.reshape(glimpse, shp)
+
     def _prior(self, inputs, out_shp=tuple([-1])):
         inputs = tf.concat(inputs, axis=1)
         hidden = tf.layers.dense(inputs, **self._kwargs)
@@ -79,9 +86,7 @@ class Encoder:
 
     def _posterior(self, glimpse, l):
         if self.use_conv:
-            # Glimpse is flattened[batch_sz, num_scales, H, W, C].
-            # Bring into[B, num_scales * scale_sz[0], scale_sz[0], C] (retina scales stacked vertically)
-            glimpse = tf.reshape(glimpse, [tf.shape(glimpse)[0]] + [self.patch_shape[0] * self.patch_shape[1], self.patch_shape[2], self.patch_shape[3]])
+            glimpse = self._unflatten_glimpse(glimpse)
             hidden = tf.layers.conv2d(glimpse, filters=32, kernel_size=[3, 3], padding='valid', activation=tf.nn.relu)
             hidden = tf.layers.conv2d(hidden, filters=32, kernel_size=[2, 2], padding='valid', activation=tf.nn.relu)
         else:
@@ -91,7 +96,7 @@ class Encoder:
         if self.use_conv:
             hidden = tf.layers.flatten(hidden)
 
-        mu = tf.layers.dense(hidden, units=self.size_z, activation=None)
+        mu = tf.layers.dense(hidden, units=self.size_z, activation=None, name='mu')
 
         if self.z_dist == 'N':
             sigma = tf.layers.dense(hidden, units=self.size_z, activation=tf.nn.softplus, name='sigma')
@@ -110,97 +115,68 @@ class Encoder:
         out = {k: tf.reshape(v, [-1] + self.output_shape) if (v is not None) else None for k, v in out.items()}
         return out
 
-    # @property
-    # def output_size(self):
-    #     return self.size_z
-
     @property
     def output_shape(self):
         return [self.size_z]
 
 
-class Decoder:
-    def __init__(self, FLAGS, size_glimpse_out, name='VAEDecoder'):
-        self.name = name
-        self._size_glimpse_out = size_glimpse_out
-        if FLAGS.pixel_obs_discrete:
-            self._size_glimpse_out *= FLAGS.pixel_obs_discrete
-        self.pixel_obs_discrete = FLAGS.pixel_obs_discrete
-        self._gl_std = FLAGS.gl_std
-        self._min_stddev = 1e-5
-        self._kwargs = dict(units=FLAGS.num_hidden_fc, activation=tf.nn.relu)
-        self.use_conv = FLAGS.use_conv
+class EncoderConv(Encoder):
+    def __init__(self, FLAGS, patch_shape, is_training, name='VAEEncoder'):
+        super(EncoderConv, self).__init__(FLAGS, patch_shape, is_training, name)
+        assert self.patch_shape == [1, 8, 8, 1], 'Not implemented for these scales with patch shape {}'.format(self.patch_shape)
 
-    def decode(self, inputs, true_glimpse=None, out_shp=tuple([-1])):
-        # TODO: HOW (AND IF) LOCATION SHOULD BE INCORPORATED IN THE INPUTS (z IS ALREADY KINDOF LOCATION DEPENDENT)
-        with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
-            inputs = tf.concat(inputs, axis=1)
-            if self.use_conv:
-                hidden = tf.layers.dense(inputs, units=5*5*32, activation=tf.nn.relu)
-                hidden = tf.reshape(hidden, [tf.shape(hidden)[0], 5, 5, 32])
-                hidden = tf.layers.conv2d_transpose(hidden, filters=32, kernel_size=[3, 3], padding='valid', activation=tf.nn.relu)
-                mu_logits = tf.layers.conv2d_transpose(hidden, filters=1, kernel_size=[2, 2], padding='valid', activation=None)
-                mu_logits = tf.layers.flatten(mu_logits)
-                if self._gl_std == -1:
-                    sigma = tf.layers.conv2d_transpose(hidden, filters=1, kernel_size=[2, 2], padding='valid', activation=tf.nn.softplus)
-                    sigma += self._min_stddev
-                    sigma = tf.layers.flatten(sigma)
-                else:
-                    sigma = None
-            else:
-                hidden = tf.layers.dense(inputs, **self._kwargs)
-                mu_logits = tf.layers.dense(hidden, self._size_glimpse_out, None)
-                if self._gl_std == -1:
-                    sigma = tf.layers.dense(hidden, self._size_glimpse_out, tf.nn.softplus)
-                    sigma += self._min_stddev
-                else:
-                    sigma = None
+        self.shape_z = [4, 4]
+        self.size_z = None
 
-            if self.pixel_obs_discrete:
-                mu_logits = tf.reshape(mu_logits, [-1, self._size_glimpse_out // self.pixel_obs_discrete, self.pixel_obs_discrete])
-                sigma = tf.reshape(sigma, [-1, self._size_glimpse_out // self.pixel_obs_discrete, self.pixel_obs_discrete]) if sigma else None
-                mu_prob = tf.nn.softmax(mu_logits)
-            else:
-                mu_prob = tf.nn.sigmoid(mu_logits)
+    def _prior(self, inputs, out_shp=tuple([-1])):
+        """Inputs: hyp, s, l"""
+        # TODO: think whether there is a good way to do this with convolutions (add hyp, loc as a channel or smth)
+        inputs = tf.concat(inputs, axis=1)
+        hidden = tf.layers.dense(inputs, **self._kwargs)
+        mu = tf.layers.dense(hidden, tf.reduce_prod(self.shape_z), None)
 
-            if true_glimpse is not None:
-                loss = self._nll_loss(mu_logits, mu_prob, sigma, true_glimpse)
-                loss = tf.reshape(loss, list(out_shp))
-            else:
-                loss = None
+        if self.z_dist == 'N':
+            sigma = tf.layers.dense(hidden, tf.reduce_prod(self.shape_z), tf.nn.softplus, name='sigma')
+            sigma += self._min_stddev
+        else:
+            sigma = None
 
-        out = {'sample': mu_prob,
-                'mu_logits': mu_logits,
-                'mu_prob': mu_prob,
-                'sigma': sigma,
-               }
+        # TODO: NOT SURE IF EMA WORKS A HUNDRED PERCENT CORRECTLY
+        mu = self._centering(mu, self.ema_prior)
+
+        sample, log_sample = self._sample(mu, sigma, temp=self.temp_prior)
+
+        out = {'mu': mu,
+               'sigma': sigma,
+               'sample': sample,
+               'log_sample': log_sample}
+        if out_shp is None:
+            out_shp = [-1]
         out = {k: tf.reshape(v, list(out_shp) + self.output_shape) if (v is not None) else None for k, v in out.items()}
-        out['loss'] = loss
         return out
 
-    def _nll_loss(self, mu_logits, mu_prob, sigma, true_glimpse):
-        if self.pixel_obs_discrete:
-            true_glimpse_1hot = tf.cast(self.pixel_obs_discrete * true_glimpse, tf.int32)
-            true_glimpse_1hot = tf.one_hot(true_glimpse_1hot, depth=self.pixel_obs_discrete)
+    def _posterior(self, glimpse, l):
+        hidden = tf.layers.conv2d(glimpse, filters=32, kernel_size=[3, 3], padding='valid', activation=tf.nn.relu)  # [6, 6]
+        mu = tf.layers.conv2d(hidden, filters=32, kernel_size=[3, 3], padding='valid', activation=None, name='mu')  # [4, 4]
 
-            loss = tf.nn.softmax_cross_entropy_with_logits(labels=true_glimpse_1hot, logits=mu_logits)
-            loss /= self.pixel_obs_discrete  # normalise by number of dimensions
+        if self.z_dist == 'N':
+            sigma = tf.layers.conv2d(hidden, filters=32, kernel_size=[3, 3], padding='valid', activation=tf.nn.softplus, name='sigma')  # [4, 4]
+            sigma += self._min_stddev
         else:
-            if self._gl_std == -1:
-                dist = tf.distributions.Normal(loc=mu_prob, scale=sigma)
-            else:
-                dist = MSEDistribution(mu_prob)
-            loss = -dist.log_prob(true_glimpse)
-        loss = tf.reduce_sum(loss, axis=-1)
-        return loss
+            sigma= None
 
-    # @property
-    # def output_size(self):
-    #     return self._size_glimpse_out
+        mu = self._centering(mu, self.ema_post)
+        assert mu.shape[1:] == self.shape_z
+
+        sample, log_sample = self._sample(mu, sigma, temp=self.temp_post)
+
+        out = {'mu': mu,
+                'sigma': sigma,
+                'sample': sample,
+                'log_sample': log_sample}
+        out = {k: tf.reshape(v, [-1] + self.output_shape) if (v is not None) else None for k, v in out.items()}
+        return out
 
     @property
     def output_shape(self):
-        if self.pixel_obs_discrete:
-            return [self._size_glimpse_out // self.pixel_obs_discrete, self.pixel_obs_discrete]
-        else:
-            return [self._size_glimpse_out]
+        return self.shape_z

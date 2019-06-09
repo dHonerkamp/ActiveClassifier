@@ -88,6 +88,8 @@ class Utility(object):
         experiment_name += 'z{sz}{d}{kl}C{c}w{w}_fbN{n}'.format(sz=FLAGS.size_z, d=FLAGS.z_dist, kl=FLAGS.z_B_kl, c=FLAGS.z_B_center, w=FLAGS.z_kl_weight, n=FLAGS.normalise_fb)
         if FLAGS.use_conv:
             experiment_name += '_CNN'
+        if FLAGS.convLSTM:
+            experiment_name += '_convLSTM'
         if FLAGS.planner == 'ActInf':
             experiment_name += '_c{}a{}p{}{}'.format(FLAGS.prior_preference_c, FLAGS.precision_alpha, FLAGS.prior_preference_glimpses, FLAGS.rl_reward)
             experiment_name += 'pixel{}bins'.format(FLAGS.pixel_obs_discrete) if FLAGS.use_pixel_obs_FE else ''
@@ -175,6 +177,7 @@ class Utility(object):
         parser.add_argument('--num_hidden_fc', type=int, default=512, help='Standard size of fully connected layers.')
         parser.add_argument('--use_conv', type=int, default=0, choices=[0, 1], help='Whether to use a convolutional encoder/decoder instead of fc.')
         parser.add_argument('--size_rnn', type=int, default=256, help='Size of the RNN cell.')
+        parser.add_argument('--convLSTM', type=int, default=0, choices=[0, 1], help='Whether to use a convLSTM + convolution encoder. Leads to ignore size_rnn')
         parser.add_argument('--gl_std', type=int, default=1, help='-1 to learn the glimpse standard deviation in the decoder, value to set it constant.')
 
         parser.add_argument('--num_glimpses', type=int, default=5, help='Number of glimpses the network is allowed to take. If learn_num_glimpses this is the max. number to take.')

@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from tools.tf_tools import TINY
+from activeClassifier.tools.tf_tools import TINY
 
 
 class Base:

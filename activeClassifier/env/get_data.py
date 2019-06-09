@@ -2,10 +2,10 @@ import logging
 import re
 import numpy as np
 
-from env.mnist import get_MNIST
-from env.cifar10 import get_cifar
-from env.notMNIST import notMNIST
-from env.omniglot import get_omni_small, get_OMNIGLOT
+from activeClassifier.env.mnist import get_MNIST
+from activeClassifier.env.cifar10 import get_cifar
+from activeClassifier.env.notMNIST import notMNIST
+from activeClassifier.env.omniglot import get_omni_small, get_OMNIGLOT
 
 logger = logging.getLogger(__name__)
 

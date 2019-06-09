@@ -1,12 +1,12 @@
 import tensorflow as tf
 from tensorflow import distributions as tfd
 
-from models import base
-from tools.tf_tools import write_zero_out, repeat_axis, calculate_gaussian_nll
-from modules.policyNetwork import PolicyNetwork
-from modules.VAE.VAE_OLD import Encoder, Decoder, GlimpseEncoder
-from modules.planner import ActInfPlanner, REINFORCEPlanner
-from modules.stateTransition import StateTransition_AC
+from activeClassifier.models import base
+from activeClassifier.tools.tf_tools import write_zero_out, repeat_axis, calculate_gaussian_nll
+from activeClassifier.modules.policyNetwork import PolicyNetwork
+from activeClassifier.modules.VAE.VAE_OLD import Encoder, Decoder, GlimpseEncoder
+from activeClassifier.modules.planner import ActInfPlanner, REINFORCEPlanner
+from activeClassifier.modules.stateTransition import StateTransition_AC
 
 
 class ActiveClassifier(base.Base):

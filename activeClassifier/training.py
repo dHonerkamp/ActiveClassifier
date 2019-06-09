@@ -4,12 +4,12 @@ import time
 import tensorflow as tf
 from sklearn.metrics import f1_score
 
-from env.env import ImageForagingEnvironment
-from tools.utility import Utility, Proc_Queue
-from models.predRSSM import predRSSM
-from visualisation.visualise_predRSSM import Visualization_predRSSM
-# from models.activeClassifier import ActiveClassifier
-# from visualisation.visualise_ActCl import Visualization_ActCl
+from activeClassifier.env.env import ImageForagingEnvironment
+from activeClassifier.tools.utility import Utility, Proc_Queue
+from activeClassifier.models.predRSSM import predRSSM
+from activeClassifier.visualisation.visualise_predRSSM import Visualization_predRSSM
+# from activeClassifier.models.activeClassifier import ActiveClassifier
+# from activeClassifier.visualisation.visualise_ActCl import Visualization_ActCl
 
 # only to display G matrix
 import numpy as np

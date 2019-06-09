@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow import distributions as tfd
 # from tensorflow.contrib.distributions import RelaxedBernoulli, Logistic
 
-from tools.tf_tools import FiLM_layer, pseudo_LogRelaxedBernoulli
+from activeClassifier.tools.tf_tools import FiLM_layer, pseudo_LogRelaxedBernoulli
 
 
 class BeliefUpdate:

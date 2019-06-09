@@ -2,12 +2,12 @@ from matplotlib import pyplot as plt
 import numpy as np
 import tensorflow as tf
 
-from env.env import ImageForagingEnvironment
-from tools.utility import Utility
-from tools.tf_tools import repeat_axis
-from tools.MSE_distribution import MSEDistribution
-from modules.policyNetwork import PolicyNetwork
-from env.get_data import get_data, create_class_mapping_ukMax
+from activeClassifier.env.env import ImageForagingEnvironment
+from activeClassifier.tools.utility import Utility
+from activeClassifier.tools.tf_tools import repeat_axis
+from activeClassifier.tools.MSE_distribution import MSEDistribution
+from activeClassifier.modules.policyNetwork import PolicyNetwork
+from activeClassifier.env.get_data import get_data, create_class_mapping_ukMax
 
 def setup():
     FLAGS, unparsed = Utility.parse_arg()

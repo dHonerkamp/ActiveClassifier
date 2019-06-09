@@ -1,8 +1,8 @@
 import tensorflow as tf
 from tensorflow import distributions as tfd
 
-from modules.planner.base import Base
-from tools.tf_tools import repeat_axis, binary_entropy, differential_entropy_normal, differential_entropy_diag_normal
+from activeClassifier.modules.planner.base import Base
+from activeClassifier.tools.tf_tools import repeat_axis, binary_entropy, differential_entropy_normal, differential_entropy_diag_normal
 
 
 class ActInfPlanner(Base):

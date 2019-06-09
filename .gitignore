@@ -4,9 +4,11 @@
 *.ipynb_checkpoints
 
 # Directories
-activeClassifier/deployment/
-activeClassifier/logs/
-activeClassifier/data/
+deployment/
+logs/
+data/
+venv/
+activeClassifier.egg-info/
 
 # Tex files
 *.log
@@ -17,4 +19,4 @@ activeClassifier/data/
 
 # Files
 activeClassifier/tools/gumbel_softmax.py
-activeClassifier/metrics_overviewOLD.ipynb
+notebooks/metrics_overviewOLD.ipynb

@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from tools.tf_tools import repeat_axis
+from activeClassifier.tools.tf_tools import repeat_axis
 
 
 class Base:

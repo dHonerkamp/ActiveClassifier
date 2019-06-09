@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow import distributions as tfd
 
-from tools.tf_tools import repeat_axis, entropy
+from activeClassifier.tools.tf_tools import repeat_axis, entropy
 
 
 class Planner:

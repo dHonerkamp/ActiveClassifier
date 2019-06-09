@@ -1,10 +1,10 @@
 import os.path
 import pickle
 
-from tools.utility import Utility
-from env.get_data import get_data, random_uk_selection
-from phase_config import get_phases
-from training import run_phase
+from activeClassifier.tools.utility import Utility
+from activeClassifier.env.get_data import get_data, random_uk_selection
+from activeClassifier.phase_config import get_phases
+from activeClassifier.training import run_phase
 
 
 def main():

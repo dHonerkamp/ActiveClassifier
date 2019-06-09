@@ -1,15 +1,15 @@
 import warnings
 import tensorflow as tf
 
-from models import base
-from tools.tf_tools import repeat_axis
-from modules.policyNetwork import PolicyNetwork
-from modules.VAE.encoder import Encoder, EncoderConv
-from modules.VAE.decoder import Decoder
-from modules.planner.ActInfPlanner import ActInfPlanner
-from modules.planner.REINFORCEPlanner import REINFORCEPlanner
-from modules.stateTransition import StateTransition
-from modules.beliefUpdate import PredErrorUpdate, FullyConnectedUpdate, RAMUpdate
+from activeClassifier.models import base
+from activeClassifier.tools.tf_tools import repeat_axis
+from activeClassifier.modules.policyNetwork import PolicyNetwork
+from activeClassifier.modules.VAE.encoder import Encoder, EncoderConv
+from activeClassifier.modules.VAE.decoder import Decoder
+from activeClassifier.modules.planner.ActInfPlanner import ActInfPlanner
+from activeClassifier.modules.planner.REINFORCEPlanner import REINFORCEPlanner
+from activeClassifier.modules.stateTransition import StateTransition
+from activeClassifier.modules.beliefUpdate import PredErrorUpdate, FullyConnectedUpdate, RAMUpdate
 
 
 class predRSSM(base.Base):

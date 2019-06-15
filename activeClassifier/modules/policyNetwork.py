@@ -1,5 +1,7 @@
 import numpy as np
 import tensorflow as tf
+import logging
+logger = logging.getLogger(__name__)
 
 
 class PolicyNetwork:
@@ -9,12 +11,16 @@ class PolicyNetwork:
         self.init_loc_rng = FLAGS.init_loc_rng
         self.B = batch_sz
         self.loc_dim = FLAGS.loc_dim
+        self.img_shape =  FLAGS.img_shape
         self._units = FLAGS.num_hidden_fc
 
-        self.std = tf.train.exponential_decay(FLAGS.loc_std, tf.train.get_global_step(),
-                                              decay_steps=FLAGS.train_batches_per_epoch,
-                                              decay_rate=0.9)
-        self.std = tf.maximum(self.std, FLAGS.loc_std_min)
+        if (FLAGS.loc_std != FLAGS.loc_std_min):
+            self.std = tf.train.exponential_decay(FLAGS.loc_std, tf.train.get_global_step(),
+                                                  decay_steps=FLAGS.train_batches_per_epoch,
+                                                  decay_rate=0.9)
+            self.std = tf.maximum(self.std, FLAGS.loc_std_min)
+        else:
+            self.std = FLAGS.loc_std
 
         self.calc_encoding = tf.make_template(self.name, self._input_encoding)
 
@@ -81,6 +87,23 @@ class PolicyNetwork:
             loc = tf.constant(loc)
             loc = tf.tile(loc[tf.newaxis, :, :], [self.B, 1, 1])
         return loc, loc
+
+    def find_seen_locs(self, locations, num_glimpses, closeness=3):
+        """
+        Args:
+            closeness: in pixels
+        """
+        if (self.img_shape[0] != self.img_shape[1]):
+            logger.warning('Location closeness assumes square images')
+        closeness /= (self.img_shape[0] / 2)  # into -1, 1 range. Assuming square image
+
+        seen = [tf.zeros(self.B, dtype=tf.bool)]  # nothing has been seen yet at t=0
+        for t in range(1, num_glimpses):  # TODO: if using dynamic glimpses changes this to a tf.while loop over self.num_glimpses_dyn
+            loc_dist = tf.norm(locations[t][tf.newaxis] - locations[:t], axis=-1, ord='euclidean')  # [t, B]
+            is_close = tf.reduce_any(loc_dist <= closeness, axis=0)  # [B]
+            seen.append(is_close)
+        seen_locs = tf.stack(seen, axis=0)  # [T, B]
+        return seen_locs
 
     def inital_loc(self):
         return self.random_loc(rng=self.init_loc_rng)

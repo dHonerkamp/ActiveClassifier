@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-from env.dataDownload import DataDownload
+from activeClassifier.env.dataDownload import DataDownload
 
 class notMNIST(DataDownload):
     def __init__(self, datadir, test_only=False):

@@ -50,6 +50,9 @@ class Utility(object):
             FLAGS.padding          = "uniform"
             FLAGS.num_classes      = 10
 
+        if FLAGS.planner == 'RL':
+            assert FLAGS.rl_reward == 'clf'
+
         if not FLAGS.use_pixel_obs_FE:
             assert (FLAGS.pixel_obs_discrete == 0)
 
@@ -145,7 +148,7 @@ class Utility(object):
         parser.add_argument('-b', '--batch_size', type=int, default=64, help='How many items to train with at once.')
         parser.add_argument('--MC_samples', type=int, default=10, help='Number of Monte Carlo Samples per image.')
         parser.add_argument('-e', '--num_epochs', type=int, default=8, help='Number of training epochs.')
-        parser.add_argument('--pre_train_epochs', type=int, default=0, help='Number of epochs to train generative model only on random locations.')
+        parser.add_argument('-npre', '--pre_train_epochs', type=int, default=0, help='Number of epochs to train generative model only on random locations.')
         parser.add_argument('--pre_train_policy', type=str, default='same', choices=['same', 'random', 'ActInf', 'RL'], help="Pretrain policy. 'Same' to use same as main phase.")
         parser.add_argument('--pre_train_uk', type=int, default=1, choices=[0, 1], help='Whether to include uks during pretrain phase.')
         parser.add_argument('--freeze_enc', type=int, default=None, help='Number of epochs after which to freeze the encoder weights. Set to None to ignore.')
@@ -183,7 +186,7 @@ class Utility(object):
         parser.add_argument('--convLSTM', type=int, default=0, choices=[0, 1], help='Whether to use a convLSTM + convolution encoder. Leads to ignore size_rnn')
         parser.add_argument('--gl_std', type=int, default=1, help='-1 to learn the glimpse standard deviation in the decoder, value to set it constant.')
 
-        parser.add_argument('--num_glimpses', type=int, default=5, help='Number of glimpses the network is allowed to take. If learn_num_glimpses this is the max. number to take.')
+        parser.add_argument('-gl', '--num_glimpses', type=int, default=5, help='Number of glimpses the network is allowed to take. If learn_num_glimpses this is the max. number to take.')
         parser.add_argument('--resize_method', type=str, default="BILINEAR", choices=['AVG', 'BILINEAR', 'BICUBIC'], help='Method used to downsize the larger retina scales. AVG: average pooling')
         parser.add_argument('--scale_sizes', nargs='+', type=int, default=[8],
                             help='List of scale dimensionalities used for retina network (size of the glimpses). Resolution gets reduced to first glimpses size.'
@@ -295,7 +298,7 @@ class Utility(object):
 
         # os.environ['TF_CPP_MIN_VLOG_LEVEL'] = '2'
 
-        if unparsed:
+        if unparsed and not 'activeClassifier.test' in unparsed[0]:
             raise ValueError('UNPARSED: {}'.format(unparsed))
         logger.info(sys.argv)
 

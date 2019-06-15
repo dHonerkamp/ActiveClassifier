@@ -1,14 +1,15 @@
 import warnings
 import tensorflow as tf
+import logging
+logger = logging.getLogger(__name__)
 
 from activeClassifier.models import base
-from activeClassifier.tools.tf_tools import repeat_axis
 from activeClassifier.modules.policyNetwork import PolicyNetwork
 from activeClassifier.modules.VAE.encoder import Encoder, EncoderConv
 from activeClassifier.modules.VAE.decoder import Decoder
 from activeClassifier.modules.planner.ActInfPlanner import ActInfPlanner
 from activeClassifier.modules.planner.REINFORCEPlanner import REINFORCEPlanner
-from activeClassifier.modules.stateTransition import StateTransition
+from activeClassifier.modules.stateTransition import StConvLSTM, StGRU, StAdditive
 from activeClassifier.modules.beliefUpdate import PredErrorUpdate, FullyConnectedUpdate, RAMUpdate
 
 
@@ -43,7 +44,12 @@ class predRSSM(base.Base):
         else:
             VAEencoder   = Encoder(FLAGS, env.patch_shape, self.is_training)
         VAEdecoder   = Decoder(FLAGS, env.patch_shape_flat)
-        stateTransition = StateTransition(FLAGS, FLAGS.size_rnn, self.B, VAEencoder.conv_shape_z)
+        if FLAGS.convLSTM:
+            stateTransition = StConvLSTM(FLAGS, self.B, VAEencoder.conv_shape_z)
+            # stateTransition = StAdditive(FLAGS, self.B, VAEencoder.conv_shape_z)
+        else:
+            stateTransition = StGRU(FLAGS, self.B, VAEencoder.conv_shape_z)
+
         fc_baseline = tf.layers.Dense(10, name='fc_baseline') if FLAGS.rl_reward == 'G' else tf.layers.Dense(1, name='fc_baseline')
 
         submodules = {'policyNet': policyNet,
@@ -235,19 +241,36 @@ class predRSSM(base.Base):
                 self.classification = classification_decision
 
             with tf.name_scope('VAE'):
-                # mask losses of wrong hyptheses
+                # posterior nll
                 nll_post = tf.reduce_sum(self.nll_posterior, 0)  # sum over time
                 nll_post = tf.reduce_mean(nll_post)  # mean over batch
 
-                correct_hypoths = tf.cast(tf.one_hot(env.y_MC, depth=FLAGS.num_classes_kn), tf.bool)
-                KLdivs_correct = tf.boolean_mask(self.KLdivs, mask=correct_hypoths, axis=1)
-                KLdiv = tf.reduce_mean(tf.reduce_sum(KLdivs_correct, axis=0))  # sum over time
+                # KLdiv: train model to predict glimpses where (i) the hyp is correct (ii) the location has previously been seen
+                correct_hypoths = tf.cast(tf.one_hot(env.y_MC, depth=FLAGS.num_classes_kn), tf.bool)  # [B, hyp]
+
+                incl_seen = True
+                if not incl_seen:
+                    KLdivs_used = tf.boolean_mask(self.KLdivs, mask=correct_hypoths, axis=1)  # [B, ?]
+                else:
+                    start_from_epoch = 1  # at beginning all locations are 0, give it some time to develop strategie that don't look at same loc all the time
+                    closeness = 3  # in pixel
+                    seen_locs = tf.cond(self.epoch_num >= start_from_epoch,
+                                        lambda: policyNet.find_seen_locs(self.actions, FLAGS.num_glimpses, closeness=closeness),
+                                        lambda: tf.zeros([FLAGS.num_glimpses, self.B], dtype=tf.bool),
+                                        name='seen_locs_cond')
+                    if FLAGS.uk_label is not None:
+                        seen_locs = tf.logical_and(seen_locs, tf.not_equal(self.y_MC, FLAGS.uk_label)[tf.newaxis, :])
+
+                    mask = tf.logical_or(seen_locs[:, :, tf.newaxis], correct_hypoths[tf.newaxis, :, :])  # broadcast into [T, B, hyp]
+                    # KLdivs_used = tf.boolean_mask(self.KLdivs, mask=mask)  # not shape preserving: [?]
+                    KLdivs_used = tf.where(mask, self.KLdivs, tf.zeros_like(self.KLdivs))
+                KLdiv = tf.reduce_sum(KLdivs_used) / tf.cast(self.B, tf.float32)  # sum over time
 
             with tf.name_scope('Bl_surprise'):
                 if FLAGS.normalise_fb:
                     if FLAGS.uk_label is not None:
                         bl_surprise = tf.boolean_mask(bl_surprise, mask=tf.not_equal(self.y_MC, FLAGS.uk_label), axis=1)
-                    bl_surpise_mse = tf.reduce_mean(tf.reduce_sum(tf.square(tf.stop_gradient(KLdivs_correct) - tf.squeeze(bl_surprise, 2)), axis=0))
+                    bl_surpise_mse = tf.reduce_mean(tf.reduce_sum(tf.square(tf.stop_gradient(KLdivs_used) - tf.squeeze(bl_surprise, 2)), axis=0))
                 else:
                     bl_surpise_mse = tf.constant(0.)
 

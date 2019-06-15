@@ -9,6 +9,7 @@ from activeClassifier.env.get_data import get_data, random_uk_selection
 from activeClassifier.env.env import ImageForagingEnvironment
 from activeClassifier.phase_config import get_phases
 from activeClassifier.training import run_phase
+from activeClassifier.modules.policyNetwork import PolicyNetwork
 
 from activeClassifier.modules.planner.base import Base
 
@@ -41,6 +42,45 @@ class ActInfPlannerTest(tf.test.TestCase):
                                              [0., 0., 1., 0., 0.],
                                              [0., 0., 0., 1., 0.],
                                              [0., 0., 0., 0., 1.]])
+
+class PolicyNetTest(tf.test.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.FLAGS, cls.config = Utility.init(experiment_name='TEST')
+
+    @classmethod
+    def tearDownClass(cls):
+        logging.shutdown()
+        shutil.rmtree(cls.FLAGS.path, ignore_errors=True)
+
+    def test_closeness(self):
+        B = 1
+
+        policyNet = PolicyNetwork(self.FLAGS, B)
+
+        closeness_pixel = 3
+
+        # [T, B, 2]
+        locs = [[[0., 0.]],
+                [[4., 0.]],
+                [[3., 0.]],
+                [[2., 2.]],
+                [[4., 0.]],
+                [[10, 10]]]
+        locs = tf.constant(locs)
+        # into [-1, 1] range
+        locs /= (self.FLAGS.img_shape[0] / 2)
+        locs -= 1
+
+        seen_locs = policyNet.find_seen_locs(locs, num_glimpses=locs.shape[0])
+
+        with self.test_session():
+            self.assertAllEqual(seen_locs.eval(), [[False],
+                                                   [False],
+                                                   [True],
+                                                   [True],
+                                                   [True],
+                                                   [False]])
 
 
 class EnvTest(tf.test.TestCase):
@@ -89,7 +129,7 @@ class EnvTest(tf.test.TestCase):
 
             self.assertEqual(out.shape, (2, 8, 8, 3))
             # random noise padding means indices for places to go across the edge will be messed up (out[0])
-            print(out[0])
+            # print(out[0])
 
             # result depends on img and scale size
             assert self.FLAGS.img_shape == [28, 28, 1]

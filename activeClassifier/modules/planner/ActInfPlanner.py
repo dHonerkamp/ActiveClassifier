@@ -141,7 +141,7 @@ class ActInfPlanner(Base):
                                                       name='rnd_loc_eval_cond')
         return next_actions, next_actions_mean
 
-    def planning_step(self, current_state, z_samples, time, is_training, rnd_loc_eval):
+    def planning_step(self, current_state, z_samples, glimpse_idx, time, is_training, rnd_loc_eval):
         """Perform one planning step.
         Args:
             current state
@@ -173,7 +173,7 @@ class ActInfPlanner(Base):
             next_actions, next_actions_mean = self._location_planning(inputs, is_training, rnd_loc_eval)
 
             # action specific state transition
-            new_state = self.stateTransition([z_samples, next_actions], current_state)
+            new_state = self.stateTransition([z_samples, next_actions, glimpse_idx], current_state)
 
             with tf.name_scope('Hypotheses_loop/'):  # for every action: loop over hypotheses
                 new_s_tiled = repeat_axis(new_state['s'], axis=0, repeats=self.n_policies * self.num_classes_kn)  # [B, rnn] -> [B * n_policies * hyp, rnn]

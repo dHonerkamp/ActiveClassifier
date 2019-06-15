@@ -5,7 +5,7 @@ matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 
-from visualisation.base import Base
+from activeClassifier.visualisation.base import Base
 
 def softmax(x):
     """Compute softmax values for each sets of scores in x."""

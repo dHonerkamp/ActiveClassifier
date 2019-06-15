@@ -29,7 +29,7 @@ class Base:
         self.handle = env.handle
         self.x_MC = env.x_MC
         self.y_MC = env.y_MC
-        self.B = env.batch_sz
+        self.B = env.B
 
         # prior preferences
         prior_preferences_glimpse = np.full([FLAGS.num_glimpses, 1], 0., dtype=np.float32)

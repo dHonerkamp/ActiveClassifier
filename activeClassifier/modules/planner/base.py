@@ -21,7 +21,7 @@ class Base:
         rnd_loc, rnd_loc = self.m['policyNet'].random_loc(rng)
         return tf.fill([self.B], -1), rnd_loc, rnd_loc, self.zero_records
 
-    def planning_step(self, current_state, z_samples, time, is_training, rnd_loc_eval):
+    def planning_step(self, current_state, z_samples, glimpse_idx, time, is_training, rnd_loc_eval):
         return
 
     def _best_believe(self, state):
@@ -37,9 +37,9 @@ class Base:
         one_hot = tf.one_hot(tf.range(n_classes), depth=n_classes)  # [n_classes, n_classes]
         return tf.tile(one_hot, [n_tiles, 1])  # [B*n_tiles, n_classes]
 
-    def single_policy_prediction(self, state, z_samples=None, next_actions=None):
+    def single_policy_prediction(self, state, z_samples=None, next_actions=None, glimpse_idx=None):
         if z_samples is not None:
-            state = self.stateTransition([z_samples, next_actions], state)
+            state = self.stateTransition([z_samples, next_actions, glimpse_idx], state)
 
         hyp = self._hyp_tiling(n_classes=self.num_classes_kn, n_tiles=self.B * 1)  # [B * 1 * n_classes_kn, n_classes_kn]
         new_s_tiled = repeat_axis(state['s'], axis=0, repeats=self.num_classes_kn)  # [B, rnn] -> [B * hyp, rnn]

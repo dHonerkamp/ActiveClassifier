@@ -43,7 +43,7 @@ class predRSSM(base.Base):
         else:
             VAEencoder   = Encoder(FLAGS, env.patch_shape, self.is_training)
         VAEdecoder   = Decoder(FLAGS, env.patch_shape_flat)
-        stateTransition = StateTransition(FLAGS, FLAGS.size_rnn)
+        stateTransition = StateTransition(FLAGS, FLAGS.size_rnn, self.B, VAEencoder.conv_shape_z)
         fc_baseline = tf.layers.Dense(10, name='fc_baseline') if FLAGS.rl_reward == 'G' else tf.layers.Dense(1, name='fc_baseline')
 
         submodules = {'policyNet': policyNet,
@@ -107,6 +107,7 @@ class predRSSM(base.Base):
         if not FLAGS.rnd_first_glimpse:
             last_state = stateTransition.initial_state(self.B, tf.zeros([self.B, policyNet.output_size]))
             last_z = tf.zeros([self.B] + VAEencoder.output_shape)
+            glimpse_idx = tf.zeros([self.B] + env.patch_shape[1:3] + [3], dtype=tf.int32) if FLAGS.convLSTM else None
 
         with tf.name_scope('Main_loop'):
             for time in range(FLAGS.num_glimpses):
@@ -119,17 +120,17 @@ class predRSSM(base.Base):
                         next_decision, next_action, next_action_mean, pl_records = planner.random_policy(FLAGS.init_loc_rng)
                         next_exp_obs = planner.single_policy_prediction(last_state, last_z, next_action)
                     else:
-                        next_decision, next_action, next_action_mean, next_exp_obs, pl_records = planner.planning_step(last_state, last_z, time, self.is_training, self.rnd_loc_eval)
+                        next_decision, next_action, next_action_mean, next_exp_obs, pl_records = planner.planning_step(last_state, last_z, glimpse_idx, time, self.is_training, self.rnd_loc_eval)
 
                     # TODO : Could REUSE FROM PLANNING STEP
-                    current_state = stateTransition([last_z, next_action], last_state)
+                    current_state = stateTransition([last_z, next_action, glimpse_idx], last_state)
 
                 bl_inputs = tf.concat([current_state['c'], current_state['s']], axis=1)
                 baseline = fc_baseline(tf.stop_gradient(bl_inputs))
                 if FLAGS.rl_reward != 'G':
                     baseline = tf.squeeze(baseline, 1)
 
-                observation, corr_classification_fb, done = env.step(next_action, next_decision)
+                observation, glimpse_idx, corr_classification_fb, done = env.step(next_action, next_decision)
                 newly_done = done
                 done = tf.logical_or(last_done, done)
                 current_state, z_samples, nll_post, reconstr_posterior, KLdivs, belief_loss, bl_surprise = beliefUpdate.update(current_state, observation, next_exp_obs, time, newly_done)

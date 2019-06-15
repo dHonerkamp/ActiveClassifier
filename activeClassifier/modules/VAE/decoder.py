@@ -1,5 +1,8 @@
 import tensorflow as tf
-from tools.MSE_distribution import MSEDistribution
+import logging
+logger = logging.getLogger(__name__)
+
+from activeClassifier.tools.MSE_distribution import MSEDistribution
 
 
 class Decoder:

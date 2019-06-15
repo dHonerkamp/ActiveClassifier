@@ -1,7 +1,10 @@
+import numpy as np
 import tensorflow as tf
 from tensorflow import distributions as tfd
+import logging
+logger = logging.getLogger(__name__)
 
-from tools.tf_tools import FiLM_layer, pseudo_LogRelaxedBernoulli, exponential_mov_avg
+from activeClassifier.tools.tf_tools import FiLM_layer, pseudo_LogRelaxedBernoulli, exponential_mov_avg
 
 
 class Encoder:
@@ -28,6 +31,7 @@ class Encoder:
         self.ema_post  = tf.Variable(tf.zeros([self.size_z]), trainable=False, name='ExpMovAvg_RelaxedBernoulli_post')
         self.is_training = is_training
         self.z_B_center = FLAGS.z_B_center
+        self.conv_shape_z = [None]
 
     def _sample(self, mu, sigma, temp=None):
         if self.z_dist == 'N':
@@ -117,6 +121,7 @@ class Encoder:
 
     @property
     def output_shape(self):
+        """Flattened! shape. Using unflattened shape could break reduce_...(axis=-1) functions. Rather reshape it into conv_shape in case needed"""
         return [self.size_z]
 
 
@@ -125,48 +130,52 @@ class EncoderConv(Encoder):
         super(EncoderConv, self).__init__(FLAGS, patch_shape, is_training, name)
         assert self.patch_shape == [1, 8, 8, 1], 'Not implemented for these scales with patch shape {}'.format(self.patch_shape)
 
-        self.shape_z = [4, 4]
-        self.size_z = None
+        self.n_filters = FLAGS.n_filters_encoder  # number of output filters
+        self.conv_shape_z = [2, 2, self.n_filters]
+        self.size_z = np.prod(self.conv_shape_z)  # flattened shape
 
-    def _prior(self, inputs, out_shp=tuple([-1])):
-        """Inputs: hyp, s, l"""
-        # TODO: think whether there is a good way to do this with convolutions (add hyp, loc as a channel or smth)
-        inputs = tf.concat(inputs, axis=1)
-        hidden = tf.layers.dense(inputs, **self._kwargs)
-        mu = tf.layers.dense(hidden, tf.reduce_prod(self.shape_z), None)
-
-        if self.z_dist == 'N':
-            sigma = tf.layers.dense(hidden, tf.reduce_prod(self.shape_z), tf.nn.softplus, name='sigma')
-            sigma += self._min_stddev
-        else:
-            sigma = None
-
-        # TODO: NOT SURE IF EMA WORKS A HUNDRED PERCENT CORRECTLY
-        mu = self._centering(mu, self.ema_prior)
-
-        sample, log_sample = self._sample(mu, sigma, temp=self.temp_prior)
-
-        out = {'mu': mu,
-               'sigma': sigma,
-               'sample': sample,
-               'log_sample': log_sample}
-        if out_shp is None:
-            out_shp = [-1]
-        out = {k: tf.reshape(v, list(out_shp) + self.output_shape) if (v is not None) else None for k, v in out.items()}
-        return out
+    # def _prior(self, inputs, out_shp=tuple([-1])):
+    #     """Inputs: hyp, s, l"""
+    #     # TODO: think whether there is a good way to do this with convolutions (add hyp, loc as a channel or smth)
+    #     inputs = tf.concat(inputs, axis=1)
+    #     hidden = tf.layers.dense(inputs, **self._kwargs)
+    #     mu = tf.layers.dense(hidden, self.size_z, None)
+    #
+    #     if self.z_dist == 'N':
+    #         sigma = tf.layers.dense(hidden, self.size_z, tf.nn.softplus, name='sigma')
+    #         sigma += self._min_stddev
+    #     else:
+    #         sigma = None
+    #
+    #     # TODO: NOT SURE IF EMA WORKS A HUNDRED PERCENT CORRECTLY
+    #     mu = self._centering(mu, self.ema_prior)
+    #
+    #     sample, log_sample = self._sample(mu, sigma, temp=self.temp_prior)
+    #
+    #     out = {'mu': mu,
+    #            'sigma': sigma,
+    #            'sample': sample,
+    #            'log_sample': log_sample}
+    #     if out_shp is None:
+    #         out_shp = [-1]
+    #     out = {k: tf.reshape(v, list(out_shp) + self.output_shape) if (v is not None) else None for k, v in out.items()}
+    #     return out
 
     def _posterior(self, glimpse, l):
-        hidden = tf.layers.conv2d(glimpse, filters=32, kernel_size=[3, 3], padding='valid', activation=tf.nn.relu)  # [6, 6]
-        mu = tf.layers.conv2d(hidden, filters=32, kernel_size=[3, 3], padding='valid', activation=None, name='mu')  # [4, 4]
+        glimpse_img = self._unflatten_glimpse(glimpse)
+        hidden = tf.layers.conv2d(glimpse_img, filters=self.n_filters, kernel_size=[3, 3], padding='valid', activation=tf.nn.relu)  # [6, 6]
+        hidden = tf.layers.conv2d(hidden, filters=self.n_filters, kernel_size=[3, 3], padding='valid', activation=tf.nn.relu)  # [4, 4]
+        mu = tf.layers.conv2d(hidden, filters=self.n_filters, kernel_size=[3, 3], padding='valid', activation=None, name='mu')  # [2, 2]
 
         if self.z_dist == 'N':
-            sigma = tf.layers.conv2d(hidden, filters=32, kernel_size=[3, 3], padding='valid', activation=tf.nn.softplus, name='sigma')  # [4, 4]
+            sigma = tf.layers.conv2d(hidden, filters=self.n_filters, kernel_size=[3, 3], padding='valid', activation=tf.nn.softplus, name='sigma')
+            assert sigma.shape[1:] == mu.shape[1:], 'mu: {} vs sigma: {}'.format(mu.shape, sigma.shape)
             sigma += self._min_stddev
         else:
             sigma= None
 
         mu = self._centering(mu, self.ema_post)
-        assert mu.shape[1:] == self.shape_z
+        assert mu.shape[1:] == self.conv_shape_z, 'mu shape {} vs conv_shape_z {}'.format(mu.shape[1:], self.conv_shape_z)
 
         sample, log_sample = self._sample(mu, sigma, temp=self.temp_post)
 
@@ -178,5 +187,5 @@ class EncoderConv(Encoder):
         return out
 
     @property
-    def output_shape(self):
-        return self.shape_z
+    def conv_shape(self):
+        return self.conv_shape_z

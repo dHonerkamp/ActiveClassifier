@@ -66,6 +66,9 @@ class Utility(object):
         FLAGS.max_gradient_norm = 5
         FLAGS.loc_dim = 2
 
+        # only for convLSTM
+        FLAGS.n_filters_encoder = 8
+
         if FLAGS.uk_test_labels or FLAGS.uk_folds:
             FLAGS.cache = 0
         assert (FLAGS.uk_test_labels is None) or (type(FLAGS.uk_test_labels) == list)
@@ -122,8 +125,8 @@ class Utility(object):
         # parser.add_argument('--start_checkpoint', type=str, default='', help='CLOSE TENSORBOARD! If specified, restore this pre-trained model before any training.')
         parser.add_argument('-f', '--exp_folder', type=str, default='', help="Used for log folder.")
         parser.add_argument('--full_summary', type=int, default=0, choices=[0, 1], help='Include all gradients and variables in summary.')
-        parser.add_argument('--data_dir', type=str, default='../data/', help="Where the data is stored")
-        parser.add_argument('--summaries_dir', type=str, default='../logs', help='Where to save summary logs for TensorBoard.')
+        parser.add_argument('--data_dir', type=str, default='data/', help="Where the data is stored")
+        parser.add_argument('--summaries_dir', type=str, default='logs', help='Where to save summary logs for TensorBoard.')
         parser.add_argument('--num_parallel_preprocess', type=int, default=4, help="Parallel processes during pre-processing (on CPU)")
         parser.add_argument('--cache', type=int, default=1, help="Whether to cache the dataset.")
         parser.add_argument('--gpu_fraction', type=float, default=0., help="Limit GPU-RAM.")
@@ -186,7 +189,7 @@ class Utility(object):
                             help='List of scale dimensionalities used for retina network (size of the glimpses). Resolution gets reduced to first glimpses size.'
                                  'Smallest to largest scale. Following scales must be a multiple of the first. Might not work for uneven scale sizes!')
         # dataset
-        parser.add_argument('-d', '--dataset', type=str, default='MNIST_OMNI_notMNIST', choices=['MNIST', 'MNIST_cluttered', 'MNIST_OMNI_notMNIST', 'cifar10', 'omniglot'], help='What dataset to use.')
+        parser.add_argument('-d', '--dataset', type=str, default='MNIST', choices=['MNIST', 'MNIST_cluttered', 'MNIST_OMNI_notMNIST', 'cifar10', 'omniglot'], help='What dataset to use.')
         parser.add_argument('--translated_size', type=int, default=0, help='Size of the canvas to translate images on.')
         parser.add_argument('--img_resize', type=int, default=0, help='Pixels to which to resize the images to.')
         parser.add_argument('--binarize_MNIST', type=int, choices=[0, 1], default=0, help='Binarize MNIST.')
@@ -256,7 +259,7 @@ class Utility(object):
 
         level = logging.DEBUG if debug else logging.INFO
 
-        logging.basicConfig(level=logging.INFO,
+        logging.basicConfig(level=level,
                             format='%(asctime)s %(name)s %(message)s',
                             handlers=[stream_handler,
                                       file_handler])
@@ -269,7 +272,8 @@ class Utility(object):
         FLAGS, unparsed = Utility.parse_arg()
         Utility.auto_adjust_flags(FLAGS)
         if experiment_name is None:
-            FLAGS.experiment_name = Utility.set_exp_name(FLAGS)
+            experiment_name = Utility.set_exp_name(FLAGS)
+        FLAGS.experiment_name = experiment_name
 
         folder = '{d}{tsz}{resz}{uk}'.format(d=FLAGS.dataset, tsz=FLAGS.translated_size or '', resz=FLAGS.img_resize or '',
                                              uk = '_UK' if FLAGS.num_uk_test or FLAGS.uk_test_labels else '')

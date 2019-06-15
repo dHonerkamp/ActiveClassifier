@@ -1,6 +1,10 @@
 import numpy as np
 import tensorflow as tf
-from env.input_fn import input_fn
+import logging
+logger = logging.getLogger(__name__)
+
+from activeClassifier.env.input_fn import input_fn
+
 
 class ImageForagingEnvironment:
     def __init__(self, FLAGS, name='env'):
@@ -16,8 +20,8 @@ class ImageForagingEnvironment:
 
             self.x_MC     = tf.tile(self.x, tf.stack([self.MC_samples, 1, 1, 1]))
             self.y_MC     = tf.tile(self.y, tf.expand_dims(self.MC_samples, axis=0))
-            self.batch_sz = tf.shape(self.x_MC)[0]  # potentially variable batch_size
-            self.img_NHWC = tf.reshape(self.x_MC, [self.batch_sz] + FLAGS.img_shape)
+            self.B = tf.shape(self.x_MC)[0]  # potentially variable batch_size
+            self.img_NHWC = tf.reshape(self.x_MC, [self.B] + FLAGS.img_shape)
 
             # setup glimpse extraction
             self.img_shape  = FLAGS.img_shape
@@ -74,18 +78,27 @@ class ImageForagingEnvironment:
             else:
                 glimpse = tf.image.extract_glimpse(self.img_NHWC, [self.scales[-1], self.scales[-1]], loc, uniform_noise=(self.padding == "uniform"))
 
+            # indices of where the glimpse pixel are coming from
+            img_idx = tf.stack(tf.meshgrid(tf.range(self.B), *[tf.range(s) for s in self.img_NHWC.shape[1:3]], indexing='ij'), axis=-1)
+            if self.scales != [8]:
+                logger.warning('glimpse_idx might be incorrect for these scales')
+                # TODO: WHAT TO DO WITH THE LOCATIONS GOING OVER THE EDGE?? FOR NOW, CHEAT A LITTLE AND CLIP LOSC TO 0.9 INSTEAD OF 1. WON'T WORK FOR ALL SCALE / IMG SIZES!
+                # TODO: NOT HANDLING MULTIPLE SCALES
+            glimpse_idx = tf.image.extract_glimpse(tf.cast(img_idx, tf.float32), [self.scales[-1], self.scales[-1]], tf.clip_by_value(loc, -0.9, 0.9))
+            glimpse_idx = tf.cast(glimpse_idx, tf.int32)
+
             if self.num_scales == 1:
                 next_glimpse = tf.layers.flatten(glimpse)
             else:
                 next_glimpse = self._multi_scale_glimpse(glimpse)
 
-            # TODO: how does "decision" look like? If it is a class label, then handle the case of deciding on class "0"
             corr_classification = tf.cast(tf.equal(decision, self.y_MC), tf.float32)
+            # non-classification action is encoded as -1
             done = tf.not_equal(decision, -1)
 
             next_glimpse = tf.where(done, tf.zeros_like(next_glimpse), next_glimpse)
 
-            return next_glimpse, corr_classification, done
+            return next_glimpse, glimpse_idx, corr_classification, done
 
     def _multi_scale_glimpse(self, glimpse):
         # tf.while should allow to process scales in parallel. Small improvement
@@ -111,7 +124,7 @@ class ImageForagingEnvironment:
 
         # [batch_sz, num_scales, H, W, C]
         patches = tf.transpose(final_ta.stack(), [1, 0, 2, 3, 4])
-        patches_flat = flatten(patches)
+        patches_flat = tf.layers.flatten(patches)
         blub = self.patch_shape_flat
         patches_flat.set_shape([None, blub])
 
@@ -155,40 +168,40 @@ class ImageForagingEnvironment:
                                    [pad_size, out_sz - FLAGS.scale_sizes[idx] - pad_size],
                                    [0, 0]])
 
-            mask = tf.ones([self.batch_sz * num_glimpses_p0, FLAGS.scale_sizes[idx], FLAGS.scale_sizes[idx], C])
+            mask = tf.ones([self.B * num_glimpses_p0, FLAGS.scale_sizes[idx], FLAGS.scale_sizes[idx], C])
             mask = tf.pad(mask, padding, mode='CONSTANT', constant_values=0)
 
             masks.append(mask)
             paddings.append(padding)
 
-        glimpses_reshpd = tf.reshape(glimpse_padded, [self.batch_sz * num_glimpses_p0, -1])
-        glimpse_composed = tf.zeros([self.batch_sz * num_glimpses_p0, out_sz, out_sz, C], tf.float32)
+        glimpses_reshpd = tf.reshape(glimpse_padded, [self.B * num_glimpses_p0, -1])
+        glimpse_composed = tf.zeros([self.B * num_glimpses_p0, out_sz, out_sz, C], tf.float32)
         scales = tf.split(glimpses_reshpd, num_scales, axis=1)
-        last_mask = tf.zeros([self.batch_sz * num_glimpses_p0, out_sz, out_sz, C])
+        last_mask = tf.zeros([self.B * num_glimpses_p0, out_sz, out_sz, C])
 
         # to check actual model env. Nesting from out to in: scales, glimpses, batch
         for idx in range(num_scales):
             downscaled_scales.append(tf.split(
-                    tf.reshape(scales[idx], [self.batch_sz * num_glimpses_p0, scale0, scale0, C]),
+                    tf.reshape(scales[idx], [self.B * num_glimpses_p0, scale0, scale0, C]),
                     num_glimpses_p0, axis=0))
 
         # Start with smallest scale, pad up to largest, multiply by (mask - last_mask) indicating area not covered by smaller masks
         for idx in range(num_scales):
-            scales[idx] = tf.reshape(scales[idx], [self.batch_sz * num_glimpses_p0, scale0, scale0, C])  # resize_images expects [B,H,W,C] -> add channel for MNIST
+            scales[idx] = tf.reshape(scales[idx], [self.B * num_glimpses_p0, scale0, scale0, C])  # resize_images expects [B,H,W,C] -> add channel for MNIST
 
             # repeat and tile glimpse to scale size (unfortunately there is no tf.repeat)
             repeats = FLAGS.scale_sizes[idx] // scale0
             scales[idx] = tf.transpose(scales[idx], [0, 3, 1, 2])  # put channels in front
 
             scales[idx] = tf.reshape(
-                    tf.tile(tf.reshape(scales[idx], [self.batch_sz * num_glimpses_p0, C, scale0 ** 2, 1]),
+                    tf.tile(tf.reshape(scales[idx], [self.B * num_glimpses_p0, C, scale0 ** 2, 1]),
                             [1, 1, 1, repeats]),
-                    [self.batch_sz * num_glimpses_p0, C, scale0, repeats * scale0])
+                    [self.B * num_glimpses_p0, C, scale0, repeats * scale0])
             scales[idx] = tf.reshape(
                     tf.tile(tf.reshape(tf.transpose(scales[idx], [0, 1, 3, 2]),
-                                       [self.batch_sz * num_glimpses_p0, C, repeats * scale0 ** 2, 1]),
+                                       [self.B * num_glimpses_p0, C, repeats * scale0 ** 2, 1]),
                             [1, 1, 1, repeats]),
-                    [self.batch_sz * num_glimpses_p0, C, repeats * scale0, repeats * scale0])
+                    [self.B * num_glimpses_p0, C, repeats * scale0, repeats * scale0])
 
             scales[idx] = tf.transpose(scales[idx], [0, 3, 2, 1])  # put channels back
 
@@ -199,4 +212,4 @@ class ImageForagingEnvironment:
                                                                   constant_values=0.)
             last_mask = masks[idx]
         # return tf.split(glimpse_composed, num_glimpses_p0, axis=0)
-        return tf.reshape(glimpse_composed, [num_glimpses_p0, self.batch_sz, out_sz, out_sz, C])
+        return tf.reshape(glimpse_composed, [num_glimpses_p0, self.B, out_sz, out_sz, C])

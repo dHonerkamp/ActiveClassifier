@@ -10,13 +10,7 @@ class StAdditive(StateTransition):
         self._conv_shape_z = conv_shape_z
         self._cell = _rnn_cell_Additive(conv_shape_z)
 
-    def _get_cell_input(self, z, glimpse_idx):
-        return z
-
-    def _get_cell_output(self, batch_sz):
-        return self._cell.zero_state(batch_sz, dtype=tf.float32)
-
-    def _get_cell_input(self, z, glimpse_idx):
+    def _get_cell_input(self, z, glimpse_idx, action):
         return tf.reshape(z, [self._B] + self._conv_shape_z)
 
     def _get_zero_cell_output(self, batch_sz):
@@ -35,6 +29,10 @@ class _rnn_cell_Additive:
     @property
     def output_size(self):
         return self._input_shape
+
+    @property
+    def trainable_variables(self):
+        return []
 
     def zero_state(self, batch_sz, dtype):
         return tf.zeros([batch_sz] + self.state_size, dtype=dtype)

@@ -17,7 +17,7 @@ class StateTransition:
         """
         z, action, glimpse_idx = inputs
 
-        cell_input = self._get_cell_input(z, glimpse_idx)
+        cell_input = self._get_cell_input(z, glimpse_idx, action)
 
         next_s_output, next_s_state = self._cell(cell_input, prev_state['s_state'])
 
@@ -56,7 +56,7 @@ class StateTransition:
     def _get_zero_cell_output(self, batch_sz):
         raise NotImplementedError("Abstract method")
 
-    def _get_cell_input(self, z, glimpse_idx):
+    def _get_cell_input(self, z, glimpse_idx, action):
         raise NotImplementedError("Abstract method")
 
 

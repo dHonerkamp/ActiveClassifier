@@ -87,7 +87,7 @@ def training_loop(FLAGS, sess, model, handles, writers, phase):
     if (sys.platform == 'win32'):
         max_processes = 1
     else:
-        max_processes = 4
+        max_processes = 5
     proc_queue = Proc_Queue(max_len=max_processes)
 
     if sess.run(model.global_step) == 0:

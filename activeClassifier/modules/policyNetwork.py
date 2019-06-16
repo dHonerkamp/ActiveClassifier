@@ -1,4 +1,3 @@
-import numpy as np
 import tensorflow as tf
 import logging
 logger = logging.getLogger(__name__)
@@ -95,7 +94,7 @@ class PolicyNetwork:
         """
         if (self.img_shape[0] != self.img_shape[1]):
             logger.warning('Location closeness assumes square images')
-        closeness /= (self.img_shape[0] / 2)  # into -1, 1 range. Assuming square image
+        closeness /= (self.img_shape[0] / 2)  # into [0, 2] range (as locations are in [-1, 1] range). Assuming square image
 
         seen = [tf.zeros(self.B, dtype=tf.bool)]  # nothing has been seen yet at t=0
         for t in range(1, num_glimpses):  # TODO: if using dynamic glimpses changes this to a tf.while loop over self.num_glimpses_dyn

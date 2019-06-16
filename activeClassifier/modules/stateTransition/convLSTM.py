@@ -8,7 +8,6 @@ class StConvLSTM(StateTransition):
     def __init__(self, FLAGS, batch_sz, conv_shape_z):
         super().__init__(FLAGS, batch_sz)
 
-        self._convLSTM = FLAGS.convLSTM
         self._conv_shape_z = conv_shape_z
         self._conv_shape = [7, 7, self._conv_shape_z[-1]]
         self._conv_shrink = np.array(FLAGS.img_shape[:-1]) // np.array(self._conv_shape[:2])
@@ -19,7 +18,7 @@ class StConvLSTM(StateTransition):
         self._cell = tf.contrib.rnn.Conv2DLSTMCell(input_shape=self._conv_shape, output_channels=conv_shape_z[-1], kernel_shape=[2, 2])
         assert len(FLAGS.scale_sizes) == 1, 'glimpse_idx not taking into account multiple scales so far!'
 
-    def _get_cell_input(self, z, glimpse_idx):
+    def _get_cell_input(self, z, glimpse_idx, action):
         # stitch z onto an empty canvas according to the lcoation of the glimpse
         z = tf.reshape(z, [self._B] + self._conv_shape_z)
 

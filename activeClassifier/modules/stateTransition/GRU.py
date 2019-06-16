@@ -3,12 +3,13 @@ import tensorflow as tf
 from activeClassifier.modules.stateTransition.base import StateTransition
 
 class StGRU(StateTransition):
-    def __init__(self, FLAGS, batch_sz, conv_shape_z):
+    def __init__(self, FLAGS, batch_sz):
         super().__init__(FLAGS, batch_sz)
+        cell_size = int(FLAGS.rnn_cell.replace('GRU', ''))
+        self._cell = tf.nn.rnn_cell.GRUCell(cell_size)
 
-        self._cell = tf.nn.rnn_cell.GRUCell(FLAGS.size_rnn)
-
-    def _get_cell_input(self, z, glimpse_idx):
+    def _get_cell_input(self, z, glimpse_idx, action):
+        # input = tf.concat([z, action], axis=-1)  # cannot control the outputs based on inputs. So don't give it the next action
         return z
 
     def _get_zero_cell_output(self, batch_sz):

@@ -59,6 +59,15 @@ class Base:
 
         return train_op, gradient_check, grads_and_vars
 
+    def _write_zero_out(self, time, ta, candidate, done, name):
+        if self.debug and (candidate.dtype == tf.float32):
+            ctrl = [tf.logical_not(tf.reduce_any(tf.is_nan(candidate)), name='ctrl_{}'.format(name))]
+        else:
+            ctrl = []
+        with tf.control_dependencies(ctrl):
+            ta = ta.write(time, tf.where(done, tf.zeros_like(candidate), candidate))
+        return ta
+
     def _create_saver(self, phase):
         return tf.train.Saver(tf.global_variables(), max_to_keep=1, name='Saver_' + phase['name'])  # tf.trainable_variables() for smaller cp
 

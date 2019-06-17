@@ -40,8 +40,9 @@ class BeliefUpdate:
             # Infer posterior z for all hypotheses
             with tf.name_scope('poterior_inference/'):
                 # TODO: SHOULD POSTERIOR GET THE current_state['s']?
-                z_post = self.m['VAEEncoder'].calc_post(new_observation,
-                                                        current_state['l'])
+                z_post = self.m['VAEEncoder'].calc_post(glimpse=new_observation,
+                                                        l=current_state['l'],
+                                                        s=current_state['s'])
                 # COULD ALSO PASS current_state['s'], BUT THAT MEANS MODEL CAN USE THINGS THAT THE PRIOR DOES NOT PREDICT AND EASILY GET GOOD PREDICTIONS AND RECONSTRUCTIONS
                 reconstr_post = self.m['VAEDecoder'].decode([z_post['sample'], current_state['l']],
                                                             true_glimpse=new_observation)  # ^= filtering, given that transitions are deterministic
@@ -69,7 +70,7 @@ class BeliefUpdate:
             current_state, loss = self.update_fn(current_state, KLdiv, time, newly_done)
 
             return (current_state,
-                    z_post['sample'],  # [B, z]
+                    z_post,  # dict of mostly [B, z]
                     reconstr_post['loss'],  # [B]
                     reconstr_post['sample'],  # [B, glimpse]
                     KLdiv,  # [B, num_classes]

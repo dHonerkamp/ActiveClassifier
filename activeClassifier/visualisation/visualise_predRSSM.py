@@ -221,9 +221,9 @@ class Visualization_predRSSM(Base):
 
     @visualisation_level(2)
     def plot_FE(self, d, nr_examples, suffix='', folder_name='FE'):
-        if self.convLSTM and not self.use_pixel_obs_FE:
+        if self.rnn_cell.startswith('Conv') and not self.use_pixel_obs_FE:
             logging.debug('Skip FE plots for convLSTM. Shapes for z not defined')
-            # TODO: adjust size_z to not come from FLAGS but from VAEEncoder.output_shape
+            # TODO: adjust size_z to not come from FLAGS but from VAEEncoder.output_shape_flat
             return
         # T x [True glimpse, posterior, exp_exp_obs, exp_obs...]
         nax_x = 3 + self.num_classes_kn

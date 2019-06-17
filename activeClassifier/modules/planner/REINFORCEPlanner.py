@@ -8,8 +8,8 @@ class REINFORCEPlanner(Base):
         super().__init__(FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition)
         self.n_policies = 1
         self._is_pre_phase = is_pre_phase
-        self.exp_obs_shape = submodules['VAEEncoder'].output_shape
-        # self.exp_obs_shape = self.m['VAEDecoder'].output_shape if FLAGS.use_pixel_obs_FE else self.m['VAEEncoder'].output_shape
+        self.exp_obs_shape = submodules['VAEEncoder'].output_shape_flat
+        # self.exp_obs_shape = self.m['VAEDecoder'].output_shape if FLAGS.use_pixel_obs_FE else self.m['VAEEncoder'].output_shape_flat
 
         # SEEMS TO LEARN TO CHEAT IF DOING THIS
         # if use_true_labels:

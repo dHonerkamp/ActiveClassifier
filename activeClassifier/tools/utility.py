@@ -87,15 +87,13 @@ class Utility(object):
     def set_exp_name(FLAGS):
         experiment_name  = '{}gl_{}_{}_bs{}_MC{}_'.format(FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples)
         experiment_name += 'lr{}dc{}_'.format(FLAGS.learning_rate, FLAGS.learning_rate_decay_factor)
-        experiment_name += '{}sc{}_glstd{}_'.format(len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.gl_std)
-        experiment_name += '1stGlRnd_' if FLAGS.rnd_first_glimpse else ''
+        experiment_name += '{}sc{}_glstd{}_{}_'.format(len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.gl_std, FLAGS.rnn_cell)
         experiment_name += 'lstd{}to{}Rng{}_'.format(FLAGS.loc_std, FLAGS.loc_std_min, FLAGS.init_loc_rng) if not FLAGS.uniform_loc10 else 'uniformLoc10'
-        experiment_name += 'preTr{}{}uk{}_'.format(FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk) if FLAGS.pre_train_epochs else ''
-        experiment_name += 'z{sz}{d}{kl}C{c}w{w}_fbN{n}'.format(sz=FLAGS.size_z, d=FLAGS.z_dist, kl=FLAGS.z_B_kl, c=FLAGS.z_B_center, w=FLAGS.z_kl_weight, n=FLAGS.normalise_fb)
+        experiment_name += 'preTr{}{}Uk{}_'.format(FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk) if FLAGS.pre_train_epochs else ''
+        experiment_name += 'z{sz}{d}{kl}C{c}w{w}_fbN{n}_'.format(sz=FLAGS.size_z, d=FLAGS.z_dist, kl=FLAGS.z_B_kl, c=FLAGS.z_B_center, w=FLAGS.z_kl_weight, n=FLAGS.normalise_fb)
+        experiment_name += '1stGlRnd' if FLAGS.rnd_first_glimpse else ''
         if FLAGS.use_conv:
             experiment_name += '_CNN'
-        if FLAGS.convLSTM:
-            experiment_name += '_convLSTM'
         if FLAGS.planner == 'ActInf':
             experiment_name += '_c{}a{}p{}{}'.format(FLAGS.prior_preference_c, FLAGS.precision_alpha, FLAGS.prior_preference_glimpses, FLAGS.rl_reward)
             experiment_name += 'pixel{}bins'.format(FLAGS.pixel_obs_discrete) if FLAGS.use_pixel_obs_FE else ''
@@ -146,7 +144,7 @@ class Utility(object):
         # parser.add_argument('--learning_rate_RL', type=float, default=1, help='Relative weight of the RL objective.')
         # standard parameters
         parser.add_argument('-b', '--batch_size', type=int, default=64, help='How many items to train with at once.')
-        parser.add_argument('--MC_samples', type=int, default=10, help='Number of Monte Carlo Samples per image.')
+        parser.add_argument('-MC', '--MC_samples', type=int, default=10, help='Number of Monte Carlo Samples per image.')
         parser.add_argument('-e', '--num_epochs', type=int, default=8, help='Number of training epochs.')
         parser.add_argument('-npre', '--pre_train_epochs', type=int, default=0, help='Number of epochs to train generative model only on random locations.')
         parser.add_argument('--pre_train_policy', type=str, default='same', choices=['same', 'random', 'ActInf', 'RL'], help="Pretrain policy. 'Same' to use same as main phase.")
@@ -166,9 +164,9 @@ class Utility(object):
         #          'cartRel: diff(x,y) '
         #          'polarRel: r, theta')
         # more important settings
-        parser.add_argument('--planner', type=str, default='ActInf', choices=['ActInf', 'RL'], help='Planning strategy.')
+        parser.add_argument('-p', '--planner', type=str, default='ActInf', choices=['ActInf', 'RL'], help='Planning strategy.')
         parser.add_argument('--rl_reward', type=str, default='clf', choices=['clf', 'G1', 'G'], help='Rewards for ActInf location policy. For other planners always clf.')
-        parser.add_argument('--beliefUpdate', type=str, default='fb', choices=['fb', 'fc', 'RAM'], help='Belief update strategy.')
+        parser.add_argument('-bu', '--beliefUpdate', type=str, default='fb', choices=['fb', 'fc', 'RAM'], help='Belief update strategy.')
         parser.add_argument('--normalise_fb', type=int, default=0, choices=[0, 1, 2], help='Use min_normalisation for prediction fb or not. 1: divide by baseline, 1: subtract baseline')
         parser.add_argument('--prior_preference_c', type=int, default=2, help='Strength of preferences for correct / wrong classification.')
         parser.add_argument('--prior_preference_glimpses', type=int, default=-4, help='Penalty for taking more than 4 glimpses (Visual foraging: -2*c).')
@@ -182,8 +180,7 @@ class Utility(object):
         parser.add_argument('--z_B_center', type=int, default=0, choices=[0, 1], help='Bernoulli latent code only: center the logits.')
         parser.add_argument('--num_hidden_fc', type=int, default=512, help='Standard size of fully connected layers.')
         parser.add_argument('--use_conv', type=int, default=0, choices=[0, 1], help='Whether to use a convolutional encoder/decoder instead of fc.')
-        parser.add_argument('--size_rnn', type=int, default=256, help='Size of the RNN cell.')
-        parser.add_argument('--convLSTM', type=int, default=0, choices=[0, 1], help='Whether to use a convLSTM + convolution encoder. Leads to ignore size_rnn')
+        parser.add_argument('--rnn_cell', type=str, default='GRU256', help='Type and size of the RNN cell. [GRU(), LSTM(), ConvLSTM, Add, ConvAdd] where () is the cell size.')
         parser.add_argument('--gl_std', type=int, default=1, help='-1 to learn the glimpse standard deviation in the decoder, value to set it constant.')
 
         parser.add_argument('-gl', '--num_glimpses', type=int, default=5, help='Number of glimpses the network is allowed to take. If learn_num_glimpses this is the max. number to take.')

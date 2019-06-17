@@ -13,7 +13,7 @@ class ActInfPlanner(Base):
         self.FE_dist = 'B' if FLAGS.use_pixel_obs_FE else FLAGS.z_dist
         self.use_pixel_obs_FE = FLAGS.use_pixel_obs_FE
         self.pixel_obs_discrete = FLAGS.pixel_obs_discrete
-        self.exp_obs_shape = self.m['VAEDecoder'].output_shape if self.use_pixel_obs_FE else self.m['VAEEncoder'].output_shape
+        self.exp_obs_shape = self.m['VAEDecoder'].output_shape if self.use_pixel_obs_FE else self.m['VAEEncoder'].output_shape_flat
         self.B = batch_sz
         self.C = C
         self.alpha = FLAGS.precision_alpha
@@ -187,7 +187,7 @@ class ActInfPlanner(Base):
                     exp_obs_prior_sigma = exp_obs_prior_enc['sigma']
                     sample = exp_obs_prior_enc['sample']
                 else:
-                    exp_obs_prior = self.m['VAEDecoder'].decode([tf.reshape(exp_obs_prior_enc['sample'], [-1] + self.m['VAEEncoder'].output_shape), new_l_tiled],
+                    exp_obs_prior = self.m['VAEDecoder'].decode([tf.reshape(exp_obs_prior_enc['sample'], [-1] + self.m['VAEEncoder'].output_shape_flat), new_l_tiled],
                                                                 out_shp=[self.B, self.n_policies, self.num_classes_kn])
                     exp_obs_prior_logits = exp_obs_prior['mu_logits']
                     exp_obs_prior_sigma = exp_obs_prior['sigma']

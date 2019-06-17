@@ -1,4 +1,5 @@
 import warnings
+import numpy as np
 import tensorflow as tf
 import logging
 logger = logging.getLogger(__name__)
@@ -9,7 +10,7 @@ from activeClassifier.modules.VAE.encoder import Encoder, EncoderConv
 from activeClassifier.modules.VAE.decoder import Decoder
 from activeClassifier.modules.planner.ActInfPlanner import ActInfPlanner
 from activeClassifier.modules.planner.REINFORCEPlanner import REINFORCEPlanner
-from activeClassifier.modules.stateTransition import StConvLSTM, StGRU, StAdditive
+from activeClassifier.modules.stateTransition import StConvLSTM, StGRU, StAdditive, StLSTM
 from activeClassifier.modules.beliefUpdate import PredErrorUpdate, FullyConnectedUpdate, RAMUpdate
 
 
@@ -39,16 +40,21 @@ class predRSSM(base.Base):
         # Initialise modules
         n_policies = FLAGS.num_classes_kn if FLAGS.planner == 'ActInf' else 1
         policyNet = PolicyNetwork(FLAGS, self.B)
-        if FLAGS.convLSTM:
+        if FLAGS.rnn_cell.startswith('Conv'):
             VAEencoder   = EncoderConv(FLAGS, env.patch_shape, self.is_training)
         else:
             VAEencoder   = Encoder(FLAGS, env.patch_shape, self.is_training)
         VAEdecoder   = Decoder(FLAGS, env.patch_shape_flat)
-        if FLAGS.convLSTM:
-            stateTransition = StConvLSTM(FLAGS, self.B, VAEencoder.conv_shape_z)
-            # stateTransition = StAdditive(FLAGS, self.B, VAEencoder.conv_shape_z)
+        if FLAGS.rnn_cell == 'ConvLSTM':
+            stateTransition = StConvLSTM(FLAGS, self.B, VAEencoder.output_shape)
+        elif FLAGS.rnn_cell.endswith('Add'):
+            stateTransition = StAdditive(FLAGS, self.B, VAEencoder.output_shape)
+        elif FLAGS.rnn_cell.startswith('GRU'):
+            stateTransition = StGRU(FLAGS, self.B)
+        elif FLAGS.rnn_cell.startswith('LSTM'):
+            stateTransition = StLSTM(FLAGS, self.B)
         else:
-            stateTransition = StGRU(FLAGS, self.B, VAEencoder.conv_shape_z)
+            raise ValueError('Unknwon rnn_cell: {}'.format(FLAGS.rnn_cell   ))
 
         fc_baseline = tf.layers.Dense(10, name='fc_baseline') if FLAGS.rl_reward == 'G' else tf.layers.Dense(1, name='fc_baseline')
 
@@ -112,8 +118,8 @@ class predRSSM(base.Base):
         last_decision = tf.fill([self.B], -1)
         if not FLAGS.rnd_first_glimpse:
             last_state = stateTransition.initial_state(self.B, tf.zeros([self.B, policyNet.output_size]))
-            last_z = tf.zeros([self.B] + VAEencoder.output_shape)
-            glimpse_idx = tf.zeros([self.B] + env.patch_shape[1:3] + [3], dtype=tf.int32) if FLAGS.convLSTM else None
+            last_z = {'mu': tf.zeros([self.B] + VAEencoder.output_shape_flat), 'sample': tf.zeros([self.B] + VAEencoder.output_shape_flat)}
+            glimpse_idx = tf.zeros([self.B] + env.patch_shape[1:3] + [3], dtype=tf.int32)
 
         with tf.name_scope('Main_loop'):
             for time in range(FLAGS.num_glimpses):
@@ -124,12 +130,12 @@ class predRSSM(base.Base):
                 else:
                     if policy == 'random':
                         next_decision, next_action, next_action_mean, pl_records = planner.random_policy(FLAGS.init_loc_rng)
-                        next_exp_obs = planner.single_policy_prediction(last_state, last_z, next_action)
+                        next_exp_obs = planner.single_policy_prediction(last_state, last_z['mu'], next_action, glimpse_idx)
                     else:
-                        next_decision, next_action, next_action_mean, next_exp_obs, pl_records = planner.planning_step(last_state, last_z, glimpse_idx, time, self.is_training, self.rnd_loc_eval)
+                        next_decision, next_action, next_action_mean, next_exp_obs, pl_records = planner.planning_step(last_state, last_z['mu'], glimpse_idx, time, self.is_training, self.rnd_loc_eval)
 
                     # TODO : Could REUSE FROM PLANNING STEP
-                    current_state = stateTransition([last_z, next_action, glimpse_idx], last_state)
+                    current_state = stateTransition([last_z['mu'], next_action, glimpse_idx], last_state)
 
                 bl_inputs = tf.concat([current_state['c'], current_state['s']], axis=1)
                 baseline = fc_baseline(tf.stop_gradient(bl_inputs))
@@ -139,7 +145,7 @@ class predRSSM(base.Base):
                 observation, glimpse_idx, corr_classification_fb, done = env.step(next_action, next_decision)
                 newly_done = done
                 done = tf.logical_or(last_done, done)
-                current_state, z_samples, nll_post, reconstr_posterior, KLdivs, belief_loss, bl_surprise = beliefUpdate.update(current_state, observation, next_exp_obs, time, newly_done)
+                current_state, z_post, nll_post, reconstr_posterior, KLdivs, belief_loss, bl_surprise = beliefUpdate.update(current_state, observation, next_exp_obs, time, newly_done)
                 # t=0 to T-1
                 ta_d['obs']                      = self._write_zero_out(time, ta_d['obs'], observation, done, 'obs')
                 ta_d['KLdivs']                   = self._write_zero_out(time, ta_d['KLdivs'], KLdivs, done, 'KLdivs')  # [B, hyp]
@@ -157,7 +163,7 @@ class predRSSM(base.Base):
                 ta_d['baselines']                = self._write_zero_out(time, ta_d['baselines'], baseline, last_done, 'baselines')  # this baseline is taken before the decision/observation! Same indexed rewards are taken after!
                 ta_d['rewards']                  = self._write_zero_out(time, ta_d['rewards'], corr_classification_fb, last_done, 'rewards')
                 ta_d['belief_loss']              = self._write_zero_out(time, ta_d['belief_loss'], belief_loss, last_done, 'belief_loss')
-                ta_d['z_post']                   = self._write_zero_out(time, ta_d['z_post'], z_samples, last_done, 'z_post')
+                ta_d['z_post']                   = self._write_zero_out(time, ta_d['z_post'], z_post['sample'], last_done, 'z_post')
                 # t=0 to T
                 for k, v in pl_records.items():
                     if FLAGS.debug: print(time, k, v.shape)
@@ -170,7 +176,7 @@ class predRSSM(base.Base):
                 ta_d['decisions'] = ta_d['decisions'].write(time, next_decision)
                 # pass on to next time step
                 last_done = done
-                last_z = z_samples
+                last_z = z_post
                 # last_c = current_c  # TODO: could also use the one from planning (new_c) or pi
                 last_state = current_state
 
@@ -250,9 +256,9 @@ class predRSSM(base.Base):
 
                 incl_seen = True
                 if not incl_seen:
-                    KLdivs_used = tf.boolean_mask(self.KLdivs, mask=correct_hypoths, axis=1)  # [B, ?]
+                    KLdivs_used = tf.boolean_mask(self.KLdivs, mask=correct_hypoths, axis=1)  # [T, ?]
                 else:
-                    start_from_epoch = 1  # at beginning all locations are 0, give it some time to develop strategie that don't look at same loc all the time
+                    start_from_epoch = 0  # at beginning all locations are 0, give it some time to develop strategie that don't look at same loc all the time
                     closeness = 3  # in pixel
                     seen_locs = tf.cond(self.epoch_num >= start_from_epoch,
                                         lambda: policyNet.find_seen_locs(self.actions, FLAGS.num_glimpses, closeness=closeness),
@@ -325,6 +331,24 @@ class predRSSM(base.Base):
             self.acc = tf.reduce_mean(tf.cast(tf.equal(self.y_MC, classification_decision), tf.float32))  # only to get easy direct intermendiate outputs
             self.avg_G = tf.reduce_mean(self.G, axis=[1])  # [T, n_policies]
 
+            fb_ratio_bestWrong_corr_ts_seen = []
+            fb_ratio_bestWrong_corr_ts_unseen = []
+            for t in range(FLAGS.num_glimpses):
+                fb_t = self.fb[t]  # [B, hyp]
+                # TODO: might be wrong for uk, assuming there is always a correct hyp per obs
+                fb_t_corr = tf.reduce_max(tf.where(correct_hypoths, fb_t, tf.zeros_like(fb_t)), axis=1)
+                fb_t_bestWrong = tf.reduce_min(tf.where(correct_hypoths, tf.ones_like(fb_t) * 1e4, fb_t), axis=1)
+                # fb_t_wrong, fb_t_corr = tf.dynamic_partition(fb_t, correct_hypoths, num_partitions=2)
+
+                ratio = fb_t_bestWrong / fb_t_corr
+
+                if incl_seen:
+                    ratio_unseen, ratio_seen = tf.dynamic_partition(ratio, tf.cast(seen_locs[t], tf.int32), num_partitions=2)
+                    fb_ratio_bestWrong_corr_ts_unseen.append(tf.reduce_mean(ratio_unseen))
+                    fb_ratio_bestWrong_corr_ts_seen.append(tf.reduce_mean(ratio_seen))
+                else:
+                    fb_ratio_bestWrong_corr_ts_unseen.append(tf.reduce_mean(ratio))
+
             scalars = {'Main/loss': self.loss,
                        'Main/acc': self.acc,
                        'loss/VAE_nll_post': nll_post,
@@ -337,6 +361,14 @@ class predRSSM(base.Base):
                        'misc/pct_noDecision': tf.count_nonzero(tf.equal(classification_decision, -1), dtype=tf.float32) / tf.cast(self.B, tf.float32),
                        'misc/T': self.avg_T,
                        }
+            for t in range(FLAGS.num_glimpses):
+                scalars['misc/fb_ratio_bestWrong_corr_t{}_unseen'.format(t)] = fb_ratio_bestWrong_corr_ts_unseen[t]
+                if incl_seen:
+                    scalars['misc/fb_ratio_bestWrong_corr_t{}_seen'.format(t)] = fb_ratio_bestWrong_corr_ts_seen[t]
+
+                # would expect this to get better over time as predictions are built upon more information (min over hypotheses). Though might be influenced by loc policy if not random
+                scalars['misc/bestKLdiv_t{}'.format(t)] = tf.reduce_mean(tf.reduce_min(self.KLdivs[t], axis=-1))
+
             if FLAGS.uk_label:
                 corr = tf.equal(self.y_MC, classification_decision)
                 is_uk = tf.equal(self.y_MC, FLAGS.uk_label)
@@ -394,7 +426,7 @@ class predRSSM(base.Base):
                 x = tf.tile(x, [1, FLAGS.num_classes_kn, 1])
                 return tf.reshape(x, [FLAGS.num_glimpses * self.B * FLAGS.num_classes_kn, x.shape[-1]])
 
-            reconstr_prior = VAEdecoder.decode([tf.reshape(self.selected_exp_obs_enc, [FLAGS.num_glimpses * self.B * FLAGS.num_classes_kn] + VAEencoder.output_shape),
+            reconstr_prior = VAEdecoder.decode([tf.reshape(self.selected_exp_obs_enc, [FLAGS.num_glimpses * self.B * FLAGS.num_classes_kn] + VAEencoder.output_shape_flat),
                                                 reshp_tile(self.actions)],
                                                true_glimpse=None,  # reshp_tile(self.obs), # only needed if also want the loss. Need to also one-hot encode if FLAGS.pixel_obs_discrete
                                                out_shp=[FLAGS.num_glimpses, self.B, FLAGS.num_classes_kn])

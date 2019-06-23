@@ -111,3 +111,9 @@ class PolicyNetwork:
     def output_size(self):
         return self.loc_dim
 
+    @staticmethod
+    def normalise_loc(loc, img_shp):
+        """Normalise locations into the [-1, 1] range"""
+        loc_adj = 2 * loc / tf.constant(img_shp[:2])[tf.newaxis, :]  # into [0, 2] range
+        loc_adj -= 1  # into [-1, 1] range
+        return loc_adj

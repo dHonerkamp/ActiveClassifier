@@ -132,7 +132,7 @@ class Utility(object):
         parser.add_argument('--cache', type=int, default=1, help="Whether to cache the dataset.")
         parser.add_argument('--gpu_fraction', type=float, default=0., help="Limit GPU-RAM.")
         parser.add_argument('--CUDA_VISIBLE_DEVICES', type=str, default=-1, help="Number of the gpu to use. -1 to ignore.")
-        parser.add_argument('--debug', type=int, default=0, choices=[0, 1], help="Debug mode.")
+        parser.add_argument('--debug', action='store_true', help="Debug mode.")
         # parser.add_argument('--folds', type=int, default=1, help='How often to run the model. uk_folds takes precedence.')
         # parser.add_argument('--f_vis', type=int, default=5, help='Stop visualizing and checkpointing after this many folds.')
         parser.add_argument('--visualisation_level', type=int, default=2, choices=[0, 1, 2], help='Level of visuals / plots to be produced. 2: all plots, 0: no plots.')
@@ -212,6 +212,15 @@ class Utility(object):
         # parser.add_argument('--num_uks_per_cycle', type=int, default=2, help='Number of classes to mask each epoch, if cycling.')
         # parser.add_argument('--punish_uk_wrong', type=float, default=0, help='If not 0: Reward of its value for not classifying an unknown as unknown.')
 
+        # model selection
+        parser.add_argument('-m', '--model', type=str, default='predRSSM', choices=['predRSSM', 'fullImgPred'], help='Flattened size of r. Default MNIST: [7, 7, 21] = 1029')
+        # fullImgPred
+        parser.add_argument('--size_r', type=int, default=1029, help='Flattened size of r. Default MNIST: [7, 7, 21] = 1029')
+        parser.add_argument('--convLSTM_L', type=int, default=3, help='Number of generative layers through the convLSTM (GQN: 12)')
+        parser.add_argument('--convLSTM_filters', type=int, default=24, help='Number of filters in the convLSTM')
+        parser.add_argument('--z_filters', type=int, default=5, help='Number of filters for z')
+
+
         FLAGS, unparsed = parser.parse_known_args()
 
         return FLAGS, unparsed
@@ -277,7 +286,9 @@ class Utility(object):
 
         folder = '{d}{tsz}{resz}{uk}'.format(d=FLAGS.dataset, tsz=FLAGS.translated_size or '', resz=FLAGS.img_resize or '',
                                              uk = '_UK' if FLAGS.num_uk_test or FLAGS.uk_test_labels else '')
-        FLAGS.path = os.path.join(FLAGS.summaries_dir, folder, FLAGS.experiment_name)
+        model_folder = FLAGS.model if FLAGS.model != 'predRSMM' else ''
+
+        FLAGS.path = os.path.join(FLAGS.summaries_dir, folder, model_folder, FLAGS.experiment_name)
         os.makedirs(FLAGS.path, exist_ok=True)
 
         logger = Utility.configure_logging(__name__, FLAGS.path, FLAGS.debug)
@@ -356,7 +367,7 @@ class Proc_Queue(deque):
                         raise ValueError('Subprocesses took more than {} to finish: {}'.format(self.max_wait, self))
             self.remove(to_remove)
 
-        logging.debug('Process qeue length:', len(self), self)
+        logging.debug('Process qeue length: {}, {}'.format(len(self), self))
         proc = Process(target=target, args=args, name=name)
         self.append(proc)
         proc.start()

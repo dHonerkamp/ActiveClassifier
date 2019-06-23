@@ -270,7 +270,7 @@ class predRSSM(base.Base):
                     mask = tf.logical_or(seen_locs[:, :, tf.newaxis], correct_hypoths[tf.newaxis, :, :])  # broadcast into [T, B, hyp]
                     # KLdivs_used = tf.boolean_mask(self.KLdivs, mask=mask)  # not shape preserving: [?]
                     KLdivs_used = tf.where(mask, self.KLdivs, tf.zeros_like(self.KLdivs))
-                KLdiv = tf.reduce_sum(KLdivs_used) / tf.cast(self.B, tf.float32)  # sum over time
+                self.KLdiv_sum = tf.reduce_sum(KLdivs_used) / tf.cast(self.B, tf.float32)  # sum over time
 
             with tf.name_scope('Bl_surprise'):
                 if FLAGS.normalise_fb:
@@ -285,11 +285,12 @@ class predRSSM(base.Base):
             ctrls = []
             if FLAGS.debug:
                 for var, name in [(policy_loss, 'policy_loss'), (baseline_mse, 'baseline_mse'), (beliefUpdate_loss, 'beliefUpdate_loss'),
-                                  (bl_surpise_mse, 'bl_surpise_mse'), (nll_post, 'nll_post'), (KLdiv, 'KLdiv')]:
-                    ctrls.append(tf.logical_not(tf.reduce_any(tf.is_nan(var)), name='isnan_{}'.format(name)))
+                                  (bl_surpise_mse, 'bl_surpise_mse'), (nll_post, 'nll_post'), (self.KLdiv_sum, 'KLdiv')]:
+                    non_nan = tf.logical_not(tf.reduce_any(tf.is_nan(var)))
+                    ctrls.append(tf.assert_equal(non_nan, True, name='isnan_{}'.format(name)))
             # TODO: SCALE LOSSES DIFFERENTLY? (only necessary if they flow into the same weights, might not be the case so far)
             with tf.control_dependencies(ctrls):
-                self.loss = policy_loss + baseline_mse + beliefUpdate_loss + bl_surpise_mse + nll_post + KLdiv
+                self.loss = policy_loss + baseline_mse + beliefUpdate_loss + bl_surpise_mse + nll_post + self.KLdiv_sum
 
         with tf.variable_scope('Optimizer'):
             def drop_vars(collection, to_drop):
@@ -308,18 +309,18 @@ class predRSSM(base.Base):
                 excl = drop_vars(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), pretrain_vars)
                 [print (v) for v in excl]
                 assert len(excl) == 2  # baseline bias and kernel, policyNet never gets initialised
-                self.train_op, gradient_check_Pre, _ = self._create_train_op(FLAGS, self.loss, self.global_step, name='train_op_pretrain', varlist=pretrain_vars)
+                self.train_op, _ = self._create_train_op(FLAGS, self.loss, self.global_step, name='train_op_pretrain', varlist=pretrain_vars)
             else:
-                self.train_op, gradient_check_F, _ = self._create_train_op(FLAGS, self.loss, self.global_step, name='train_op_full')
+                self.train_op, _ = self._create_train_op(FLAGS, self.loss, self.global_step, name='train_op_full')
 
             all_vars       = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
             excl_enc       = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='/'.join([VAEencoder.name, 'posterior']))
             excl_policyNet = (tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=policyNet.name)
                               + tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='fc_baseline'))
             assert (excl_enc is not None) and (excl_policyNet is not None)
-            loss_exclPolicy = beliefUpdate_loss + bl_surpise_mse + nll_post + KLdiv
-            self.train_op_freezeEncoder, _, _ = self._create_train_op(FLAGS, self.loss, self.global_step, varlist=drop_vars(all_vars, excl_enc), name='train_op_freezeEncoder')
-            self.train_op_freezePolNet, _, _  = self._create_train_op(FLAGS, loss_exclPolicy, self.global_step, varlist=drop_vars(all_vars, excl_policyNet), name='train_op_freezePolNet')
+            loss_exclPolicy = beliefUpdate_loss + bl_surpise_mse + nll_post + self.KLdiv_sum
+            self.train_op_freezeEncoder, _ = self._create_train_op(FLAGS, self.loss, self.global_step, varlist=drop_vars(all_vars, excl_enc), name='train_op_freezeEncoder')
+            self.train_op_freezePolNet, _  = self._create_train_op(FLAGS, loss_exclPolicy, self.global_step, varlist=drop_vars(all_vars, excl_policyNet), name='train_op_freezePolNet')
 
         with tf.name_scope('Monitoring'):
             tf.summary.scalar('lr', self.learning_rate)
@@ -352,7 +353,7 @@ class predRSSM(base.Base):
             scalars = {'Main/loss': self.loss,
                        'Main/acc': self.acc,
                        'loss/VAE_nll_post': nll_post,
-                       'loss/VAE_KLdiv': KLdiv,
+                       'loss/VAE_KLdiv': self.KLdiv_sum,
                        'loss/RL_locBl_mse': tf.reduce_mean(baseline_mse),
                        'loss/RL_policyLoss': policy_loss,
                        'loss/RL_returns': tf.reduce_mean(returns),
@@ -465,3 +466,13 @@ class predRSSM(base.Base):
         with tf.control_dependencies(ctrl):
             ta = ta.write(time, tf.where(done, tf.zeros_like(candidate), candidate))
         return ta
+
+    def get_visualisation_fetch(self):
+        return {'nll_posterior'      : self.nll_posterior,
+                'reconstr_posterior' : self.reconstr_posterior,
+                'reconstr_prior'     : self.reconstr_prior,
+                'potential_actions'  : self.potential_actions,
+                'selected_exp_obs_enc': self.selected_exp_obs_enc,
+                'z_post': self.z_post,
+                'selected_action_idx': self.selected_action_idx,
+                }

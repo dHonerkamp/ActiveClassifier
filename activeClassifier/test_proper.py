@@ -11,7 +11,7 @@ from activeClassifier.phase_config import get_phases
 from activeClassifier.training import run_phase
 from activeClassifier.modules.policyNetwork import PolicyNetwork
 
-from activeClassifier.modules.planner.base import Base
+from activeClassifier.modules.planner.base import BasePlanner
 
 
 class ObservationAveragingTest(tf.test.TestCase):
@@ -30,7 +30,7 @@ class ActInfPlannerTest(tf.test.TestCase):
     def test_hyp_tiling(self):
         B = 2
         n_pol = 1
-        hyp = Base._hyp_tiling(n_classes=5, n_tiles=B*n_pol)
+        hyp = BasePlanner._hyp_tiling(n_classes=5, n_tiles=B * n_pol)
         with self.test_session():
             self.assertAllEqual(hyp.eval(), [[1., 0., 0., 0., 0.],
                                              [0., 1., 0., 0., 0.],

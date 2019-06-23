@@ -3,7 +3,7 @@ import tensorflow as tf
 from activeClassifier.tools.tf_tools import repeat_axis
 
 
-class Base:
+class BasePlanner:
     def __init__(self, FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition):
         self.B = batch_sz
         self.num_classes = FLAGS.num_classes

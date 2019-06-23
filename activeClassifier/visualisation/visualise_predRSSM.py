@@ -7,13 +7,20 @@ from matplotlib.patches import Rectangle
 
 logger = logging.getLogger()
 
-from activeClassifier.visualisation.base import Base, visualisation_level
+from activeClassifier.visualisation.base import Visualiser, visualisation_level
 from activeClassifier.tools.utility import softmax
 
 
-class Visualization_predRSSM(Base):
+class Visualization_predRSSM(Visualiser):
     def __init__(self, model, FLAGS):
         super().__init__(model, FLAGS)
+
+        self.num_policies = model.n_policies
+        self.size_z = FLAGS.size_z
+        self.planner = FLAGS.planner
+        self.use_pixel_obs_FE = FLAGS.use_pixel_obs_FE
+        self.rnd_first_glimpse = FLAGS.rnd_first_glimpse
+        self.rnn_cell = FLAGS.rnn_cell
 
     @visualisation_level(1)
     def visualise(self, d, suffix='', nr_obs_overview=8, nr_obs_reconstr=5):

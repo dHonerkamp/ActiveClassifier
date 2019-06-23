@@ -1,9 +1,9 @@
 import tensorflow as tf
 
-from activeClassifier.modules.planner.base import Base
+from activeClassifier.modules.planner.base import BasePlanner
 
 
-class REINFORCEPlanner(Base):
+class REINFORCEPlanner(BasePlanner):
     def __init__(self, FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition, is_pre_phase, labels):
         super().__init__(FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition)
         self.n_policies = 1

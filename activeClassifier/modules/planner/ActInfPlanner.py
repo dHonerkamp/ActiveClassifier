@@ -1,11 +1,11 @@
 import tensorflow as tf
 from tensorflow import distributions as tfd
 
-from activeClassifier.modules.planner.base import Base
+from activeClassifier.modules.planner.base import BasePlanner
 from activeClassifier.tools.tf_tools import repeat_axis, binary_entropy, differential_entropy_normal, differential_entropy_diag_normal
 
 
-class ActInfPlanner(Base):
+class ActInfPlanner(BasePlanner):
     def __init__(self, FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition, C):
         super().__init__(FLAGS, submodules, batch_sz, patch_shape_flat, stateTransition)
         self.n_policies = 1 if FLAGS.rl_reward == 'G1' else FLAGS.num_classes_kn
@@ -24,14 +24,16 @@ class ActInfPlanner(Base):
         self.policy_dep_input = self._hyp_tiling(self.num_classes_kn, self.B)  # [B * hyp, num_classes]
 
     @staticmethod
-    def _discrete_entropy_agg(d, logits=None, probs=None):
+    def _discrete_entropy_agg(d, logits=None, probs=None, agg=True):
         # TODO: DOES MEAN MAKE SENSE? (at least better than sum, as indifferent to size_z)
         if d == 'B':
             dist = tfd.Bernoulli(logits=logits, probs=probs)
         elif d == 'Cat':
             dist = tfd.Categorical(logits=logits, probs=probs)
         H = dist.entropy()
-        return tf.reduce_mean(H, axis=-1)  # [B, n_policies, hyp]
+        if agg:
+            H = tf.reduce_mean(H, axis=-1)  # [B, n_policies, hyp]
+        return H
 
     @staticmethod
     def _believe_weighted_expecation(probs, believes=None, believes_tiled=None):

@@ -1,5 +1,7 @@
 import numpy as np
 import tensorflow as tf
+import logging
+logger = logging.getLogger(__name__)
 
 from activeClassifier.tools.tf_tools import TINY
 
@@ -39,25 +41,25 @@ class Base:
         prior_preferences = np.concatenate(([prior_preferences_glimpse, prior_preferences_classification]), axis=1)
         self.C = tf.nn.log_softmax(prior_preferences)  # [T, [prediction error, correct classification, wrong classification]]
 
-
     def _create_train_op(self, FLAGS, loss, global_step, name, varlist=None):
         train_op = tf.train.AdamOptimizer(self.learning_rate)
         grads_and_vars = train_op.compute_gradients(loss, var_list=varlist)
 
         # check none gradients
-        [print('{:}, {}'.format(g, v)) for g, v in grads_and_vars if g is None]
+        [logger.warning('NONE gradient: {:}, {}'.format(g, v)) for g, v in grads_and_vars if g is None]
 
-        # if global_step is not None:
-        #     clipped_grads_and_vars = []
-        #     for grad, var in grads_and_vars:
-        #         grad = tf.check_numerics(grad, 'nan_' + var.name)
-        #         clipped_grads_and_vars.append((tf.clip_by_norm(grad, FLAGS.max_gradient_norm), var))
-        # else:
-        clipped_grads_and_vars = [(tf.clip_by_norm(grad, FLAGS.max_gradient_norm), var) for grad, var in grads_and_vars]
+        clipped_grads_and_vars = []
+        for grad, var in grads_and_vars:
+            # grad = tf.Print(grad, [var.name, tf.reduce_any(tf.is_nan(grad))])
+            clipped_grads_and_vars.append((tf.clip_by_norm(grad, FLAGS.max_gradient_norm), var))
+
         train_op = train_op.apply_gradients(clipped_grads_and_vars, global_step=global_step, name=name)
-        gradient_check = {v: tf.reduce_mean(g) for g, v in clipped_grads_and_vars}
 
-        return train_op, gradient_check, grads_and_vars
+        if FLAGS.debug:
+            ctrls = [tf.check_numerics(grad, message='grad_check, var: {}, grad: {}'.format(var, grad.name)) for grad, var in grads_and_vars]
+            train_op = tf.group([train_op] + ctrls)
+
+        return train_op, grads_and_vars
 
     def _write_zero_out(self, time, ta, candidate, done, name):
         if self.debug and (candidate.dtype == tf.float32):
@@ -91,4 +93,7 @@ class Base:
 
 
     def get_train_op(self, FLAGS):
-        return None
+        raise NotImplementedError("Abstract method")
+
+    def get_visualisation_fetch(self):
+        raise NotImplementedError("Abstract method")

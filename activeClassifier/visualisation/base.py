@@ -21,30 +21,27 @@ def visualisation_level(level):
     return decorator
 
 
-class Base:
+class Visualiser:
     def __init__(self, model, FLAGS):
         self.path = FLAGS.path
         self.dataset = FLAGS.dataset
         self.visualisation_level = FLAGS.visualisation_level
         self.pre_train_epochs = FLAGS.pre_train_epochs
+        self.rnd_first_glimpse = FLAGS.rnd_first_glimpse
         self.img_shape = FLAGS.img_shape
         self.img_shape_squeezed = (self.img_shape[:2] if self.img_shape[2] == 1 else self.img_shape)
         self.num_scales = len(FLAGS.scale_sizes)
         self.scale_sizes = FLAGS.scale_sizes
         self.num_classes = FLAGS.num_classes
         self.num_classes_kn = FLAGS.num_classes_kn
-        self.num_policies = model.n_policies
-        self.size_z = FLAGS.size_z
-        self.planner = FLAGS.planner
+
         self.uk_label = FLAGS.uk_label
         self.lbl_map = FLAGS.class_remapping
-        self.use_pixel_obs_FE = FLAGS.use_pixel_obs_FE
-        self.rnd_first_glimpse = FLAGS.rnd_first_glimpse
-        self.rnn_cell = FLAGS.rnn_cell
-
 
     def visualise(self, d, suffix=None, nr_obs_overview=8, nr_obs_reconstr=5):
-        pass
+        nr_obs_overview = min(nr_obs_overview, self.batch_size_eff)  # batch_size_eff is set in _eval_feed() -> has to come before
+
+        self.plot_overview(d, nr_obs_overview, suffix)
 
     def _adjust_loc(self, locs):
         # extract_glimpses: (-1,-1) is top left. 0 is y-axis, 1 is x-axis. Scale of imshow shifted by 1.
@@ -80,21 +77,15 @@ class Base:
                  'decisions'          : model.decisions,
                  'state_believes'     : model.state_believes,
                  'G'                  : model.G,
-                 'nll_posterior'      : model.nll_posterior,
                  'glimpse'            : model.obs,
-                 'reconstr_posterior' : model.reconstr_posterior,
-                 'reconstr_prior'     : model.reconstr_prior,
                  'KLdivs'             : model.KLdivs,
                  'fb'                 : model.fb,
                  'uk_belief'          : model.uk_belief,
-                 'potential_actions'  : model.potential_actions,
                  'H_exp_exp_obs'      : model.H_exp_exp_obs,
                  'exp_H'              : model.exp_H,
                  'exp_exp_obs'        : model.exp_exp_obs,
-                 'selected_exp_obs_enc'   : model.selected_exp_obs_enc,
-                 'z_post'             : model.z_post,
-                 'selected_action_idx': model.selected_action_idx,
                  }
+        fetch.update(model.get_visualisation_fetch())
 
         d = sess.run(fetch, feed_dict=feed)
 
@@ -126,7 +117,7 @@ class Base:
         plt.setp(axes, xticks=[], yticks=[])
         self._save_fig(f, 'glimpses', '{}{}.png'.format(self.prefix, suffix))
 
-    def _plot_img_plus_locs(self, ax, x, y, clf, locs, decisions):
+    def _plot_img_plus_locs(self, ax, x, y, clf, locs, decisions, rectangle=False):
         ax.imshow(x.reshape(self.img_shape_squeezed), cmap='gray')
         ax.set_title('Label: {} Classification: {}'.format(self.lbl_map[y], self.lbl_map[clf]))
 
@@ -144,7 +135,8 @@ class Base:
             # connecting line
             ax.plot(locs[t - 1:t + 1, 1], locs[t - 1:t + 1, 0], linewidth=2.5, color=c)
             # rectangle around location?
-            # ax.add_patch(Rectangle(locs[n,i][::-1] - FLAGS.scale_sizes[0] / 2, width=FLAGS.scale_sizes[0], height=FLAGS.scale_sizes[0], edgecolor=c, facecolor='none'))
+            if rectangle:
+                ax.add_patch(Rectangle(locs[t][::-1] - self.scale_sizes[0] / 2, width=self.scale_sizes[0], height=self.scale_sizes[0], edgecolor=c, facecolor='none'))
 
         ax.set_ylim([self.img_shape[0] - 1, 0])
         ax.set_xlim([0, self.img_shape[1] - 1])

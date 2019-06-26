@@ -7,7 +7,8 @@ from activeClassifier.tools.tf_tools import TINY
 
 
 class Base:
-    def __init__(self, FLAGS, env, phase):
+    def __init__(self, FLAGS, env, phase, name):
+        self.name = name
         self.global_step = tf.train.create_global_step()
         self.global_epoch = self.global_step // FLAGS.train_batches_per_epoch
         self.total_steps = FLAGS.num_epochs * FLAGS.train_batches_per_epoch

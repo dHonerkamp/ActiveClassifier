@@ -40,6 +40,10 @@ class Visualization_predRSSM(Visualiser):
             self.plot_FE(d, nr_obs_FE, suffix)
 
     @visualisation_level(1)
+    def intermed_plots(self, d, nr_examples, suffix='', folder_name='rnd_loc_eval'):
+        self.plot_planning_patches(d, nr_examples, suffix, folder_name)
+
+    @visualisation_level(1)
     def plot_reconstr(self, d, nr_examples, suffix='', folder_name='reconstr'):
         def get_title_color(post_believes, hyp):
             if post_believes[hyp] == post_believes.max():

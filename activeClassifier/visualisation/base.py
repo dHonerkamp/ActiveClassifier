@@ -43,6 +43,10 @@ class Visualiser:
 
         self.plot_overview(d, nr_obs_overview, suffix)
 
+    @visualisation_level(1)
+    def intermed_plots(self, d, nr_examples, suffix='', folder_name='intermed'):
+        pass
+
     def _adjust_loc(self, locs):
         # extract_glimpses: (-1,-1) is top left. 0 is y-axis, 1 is x-axis. Scale of imshow shifted by 1.
         locs = np.clip(locs, -1, 1)

@@ -7,7 +7,9 @@ from sklearn.metrics import f1_score
 from activeClassifier.env.env import ImageForagingEnvironment
 from activeClassifier.tools.utility import Utility, Proc_Queue
 from activeClassifier.models.predRSSM import predRSSM
+from activeClassifier.models.fullImgPred import fullImgPred
 from activeClassifier.visualisation.visualise_predRSSM import Visualization_predRSSM
+from activeClassifier.visualisation.visualise_fullImgPred import Visualization_fullImgPred
 # from activeClassifier.models.activeClassifier import ActiveClassifier
 # from activeClassifier.visualisation.visualise_ActCl import Visualization_ActCl
 
@@ -19,8 +21,11 @@ logger = logging.getLogger(__name__)
 
 
 def batch_plotting(visual, batch_values, sfx):
-    visual.plot_fb(batch_values, sfx)
-    visual.plot_stateBelieves(batch_values, sfx)
+    try:
+        visual.plot_fb(batch_values, sfx)
+        visual.plot_stateBelieves(batch_values, sfx)
+    except AttributeError:
+        logger.debug('batch plotting not implemented yet')
 
 
 def evaluate(FLAGS, sess, model, feed, num_batches, writer, visual=None, proc_queue=None):
@@ -75,12 +80,16 @@ def intermed_plots(sess, feeds, model, visual, proc_queue):
     tmp_feed = feeds['eval_valid'].copy()
     tmp_feed[model.rnd_loc_eval] = True
     d = visual.eval_feed(sess, feed=tmp_feed, model=model)
-    proc_queue.add_proc(target=visual.plot_planning_patches, args=(d, 2, '', 'rnd_loc_eval'), name='rnd_loc_eval')
+    proc_queue.add_proc(target=visual.intermed_plots, args=(d, 2), name='intermed_plot')
 
 
 def training_loop(FLAGS, sess, model, handles, writers, phase):
     feeds = model.get_feeds(FLAGS, handles)
-    visual = Visualization_predRSSM(model, FLAGS)
+
+    if FLAGS.model == 'predRSSM':
+        visual = Visualization_predRSSM(model, FLAGS)
+    else:
+        visual = Visualization_fullImgPred(model, FLAGS)
 
     # if FLAGS.debug:
     #     max_processes = 0
@@ -99,8 +108,8 @@ def training_loop(FLAGS, sess, model, handles, writers, phase):
         train_op = model.get_train_op(FLAGS)
 
         for i in range(FLAGS.train_batches_per_epoch):
-            if i and (i % 100 == 0):
-                eval_stats = {'step': model.global_step, 'summary': model.summary, 'loss': model.loss, 'acc': model.acc, 'T': model.avg_T, 'acc_kn': model.acc_uk, 'acc_uk': model.acc_kn, 'G': model.avg_G}
+            if i and (i % 10 == 0):
+                eval_stats = {'step': model.global_step, 'summary': model.summary, 'loss': model.loss, 'acc': model.acc, 'T': model.avg_T, 'acc_kn': model.acc_uk, 'acc_uk': model.acc_kn, 'KLdiv': model.KLdiv_sum, 'G': model.avg_G}
                 out_train = sess.run(eval_stats, feed_dict=feeds['eval_train'])
                 out_valid = sess.run(eval_stats, feed_dict=feeds['eval_valid'])
                 writers['train'].add_summary(out_train.pop('summary'), global_step=out_train.pop('step'))
@@ -114,7 +123,7 @@ def training_loop(FLAGS, sess, model, handles, writers, phase):
                 # stats = ['{}: {:.3f}'.format(k, v) for k, v in sorted(out_train.items()) if not hasattr(v, "__len__")]
                 # print('{}/{}, '.format(i, FLAGS.train_batches_per_epoch) + ' '.join(stats))
 
-                if (FLAGS.planner == 'ActInf'):
+                if i and (i % 50 == 0):
                     intermed_plots(sess, feeds, model, visual, proc_queue)
             else:
                 sess.run(train_op, feed_dict=feeds['train'])
@@ -153,7 +162,11 @@ def run_phase(FLAGS, phase, initial_phase, config, writers, train_data, valid_da
         # Initialise env and model
         env = ImageForagingEnvironment(FLAGS)
         handles = env.intialise(train_data, valid_data, test_data, sess)
-        model = predRSSM(FLAGS, env, phase)
+
+        if FLAGS.model == 'predRSSM':
+            model = predRSSM(FLAGS, env, phase)
+        elif FLAGS.model == 'fullImgPred':
+            model = fullImgPred(FLAGS, env, phase)
 
         # Weights: initialise / restore from previous phase
         sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
@@ -162,11 +175,11 @@ def run_phase(FLAGS, phase, initial_phase, config, writers, train_data, valid_da
         else:
             old_vars = [v[0] for v in tf.train.list_variables(cp_path)]
             variables_can_be_restored = [v for v in tf.global_variables() if v.name.split(':')[0] in old_vars]
-            # [print(v) for v in variables_can_be_restored]
-            # print('Unrestored:')
-            # [print(v) for v in tf.global_variables() if v.name.split(':')[0] not in old_vars]
-
-            # print(variables_can_be_restored)
+            logger.debug('Restored variables:')
+            [logger.debug(v) for v in variables_can_be_restored]
+            logger.debug('Unrestored variables:')
+            [logger.debug(v) for v in tf.global_variables() if v.name.split(':')[0] not in old_vars]
+            # restore
             tf.train.Saver(variables_can_be_restored).restore(sess, cp_path)
 
         # Train

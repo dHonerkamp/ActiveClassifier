@@ -4,8 +4,10 @@ import tensorflow as tf
 import logging
 from parameterized import parameterized
 
+from activeClassifier.tools.utility import Utility
 from activeClassifier.modules_fullImg.planner import maximum_patch
-
+from activeClassifier.modules_fullImg.stateTransition import StateTransitionAdditive
+from activeClassifier.modules_fullImg.representation import Representation
 
 class MaximumPatchTest(tf.test.TestCase):
     def test_maximum_patch(self):
@@ -40,6 +42,69 @@ class MaximumPatchTest(tf.test.TestCase):
             self.assertAllEqual([[1, 1],
                                  [2, 0]], idx.eval())
 
+
+class StateTransitionTest(tf.test.TestCase):
+    def test_update_seen(self):
+        loc = [[-1., -1.],
+               [0., 0.],
+               [-1., -0.],
+               [1., 1.]]
+        loc = tf.constant(loc)
+
+        batch_sz = loc.shape[0]
+        FLAGS, _ = Utility.init(experiment_name='TEST')
+        self.path = FLAGS.path
+        FLAGS.img_shape = [9, 6, 1]
+        FLAGS.scale_sizes = [2]
+
+        reprNet = Representation(FLAGS)
+        stateTransition = StateTransitionAdditive(FLAGS, batch_sz, reprNet)
+        seen = stateTransition.initial_state['seen']
+
+        seen_updated = stateTransition._update_seen(seen, loc)
+        with self.test_session():
+            self.assertAllEqual([[[ True,  True, False, False, False, False],
+                                  [ True,  True, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False]],
+                                 [[False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False,  True,  True, False, False],
+                                  [False, False,  True,  True, False, False],
+                                  [False, False,  True,  True, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False]],
+                                 [[False, False,  True,  True, False, False],
+                                  [False, False,  True,  True, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False]],
+                                 [[False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False, False, False],
+                                  [False, False, False, False,  True,  True],
+                                  [False, False, False, False,  True,  True]]], seen_updated.eval())
+
+    # def tearDown(self):
+    #     if self.path:
+    #         print(self.path)
+    #         logging.shutdown()
+    #         shutil.rmtree(self.path, ignore_errors=True)
 
 if __name__ == '__main__':
     tf.test.main()

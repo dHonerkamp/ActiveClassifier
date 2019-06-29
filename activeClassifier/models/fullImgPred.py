@@ -39,7 +39,7 @@ class fullImgPred(base.Base):
         # n_policies = FLAGS.num_classes_kn if FLAGS.planner == 'ActInf' else 1
         policyNet = PolicyNetwork(FLAGS, self.B)
         reprNet   = Representation(FLAGS)
-        generatorNet = Generator(FLAGS, batch_sz=self.B, input_shape=reprNet.output_shape)
+        generatorNet = Generator(FLAGS, batch_sz=self.B, input_shape=reprNet.output_shape, y_MC=env.y_MC)
         # planner = ActInfPlanner_fullImg(FLAGS, self.B, self.C)
         planner = RandomLocPlanner(FLAGS, self.B)
         stateTransition = StateTransitionAdditive(FLAGS, self.B, reprNet)
@@ -85,7 +85,7 @@ class fullImgPred(base.Base):
         with tf.name_scope('Main_loop'):
             for time in range(FLAGS.num_glimpses):
                 # expected scene
-                VAE_results, next_exp_obs = generatorNet.class_cond_predictions(last_state['s'], prior_h, prior_z, env.img_NHWC)
+                VAE_results, next_exp_obs = generatorNet.class_cond_predictions(last_state['s'], prior_h, prior_z, env.img_NHWC, last_state['seen'])
 
                 next_decision, next_action, pl_records = planner.planning_step(last_state, next_exp_obs, time)
 

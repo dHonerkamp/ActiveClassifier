@@ -31,6 +31,11 @@ class StateTransitionAdditive:
         self._B = batch_sz
         self._num_classes_kn = FLAGS.num_classes_kn
 
+        self._img_shape = FLAGS.img_shape
+        self._scale_sizes = FLAGS.scale_sizes
+        ix, iy = tf.meshgrid(tf.range(self._img_shape[1]), tf.range(self._img_shape[0]))
+        self._ix, self._iy = tf.cast(ix[tf.newaxis], tf.float32), tf.cast(iy[tf.newaxis], tf.float32)  # each [1, 28, 28]
+
         self.reprNet = reprNet
         self._cell = _rnn_cell_Additive(reprNet.output_shape)
 
@@ -45,11 +50,15 @@ class StateTransitionAdditive:
 
         fb, c = self._believe_update(prev_state['fb'], KLdiv, time)
 
+        # TODO: could be done more efficiently
+        updated_seen = self._update_seen(prev_state['seen'], location)
+
         next_state = {'c'        : prev_state['c'],
                       's'        : next_s_output,
                       's_state'  : next_s_state,
                       'fb'       : fb,
-                      'uk_belief': prev_state['uk_belief']}
+                      'uk_belief': prev_state['uk_belief'],
+                      'seen'     : updated_seen}
 
         return next_state
 
@@ -64,11 +73,27 @@ class StateTransitionAdditive:
 
             return fb, c
 
+    def _update_seen(self, seen, loc):
+        """
+        Args:
+            loc: [B, loc_dim], where loc_dim = (y, x)
+        """
+        # from [-1, 1] into [0, img_shape - 1] range (-1 because of 0-indexing)
+        loc_pixel_x = ((self._img_shape[1] - 1) * loc[:, 1] + self._img_shape[1] - 1) / 2
+        loc_pixel_y = ((self._img_shape[0] - 1)* loc[:, 0] + self._img_shape[0] - 1) / 2
+        x_boundry = (loc_pixel_x - self._scale_sizes[0] / 2, loc_pixel_x + self._scale_sizes[0] / 2)
+        y_boundry = (loc_pixel_y - self._scale_sizes[0] / 2, loc_pixel_y + self._scale_sizes[0] / 2)
+
+        new = ((self._ix >= x_boundry[0][:, tf.newaxis, tf.newaxis]) & (self._ix <= x_boundry[1][:, tf.newaxis, tf.newaxis])
+               & (self._iy >= y_boundry[0][:, tf.newaxis, tf.newaxis]) & (self._iy <= y_boundry[1][:, tf.newaxis, tf.newaxis]))
+        return tf.logical_or(new, seen)
+
     @property
     def initial_state(self):
         return {'c'        : tf.fill([self._B, self._num_classes_kn], 1. / self._num_classes_kn),
                 's'        : self._cell.zero_state(self._B, tf.float32),  # output TODO: only h if usig an LSTM cell
                 's_state'  : self._cell.zero_state(self._B, tf.float32),  # full state
                 'fb'       : tf.zeros([self._B, self._num_classes_kn]),
-                'uk_belief': tf.zeros([self._B])}
+                'uk_belief': tf.zeros([self._B]),
+                'seen'     : tf.zeros([self._B] + self._img_shape[:2], dtype=tf.bool)}
 

@@ -7,7 +7,7 @@ from activeClassifier.modules.planner.base import BasePlanner
 
 
 class Generator:
-    def __init__(self, FLAGS, batch_sz, input_shape, name='generator'):
+    def __init__(self, FLAGS, batch_sz, input_shape, y_MC, name='generator'):
         self.name = name
         self.B = batch_sz
         self.input_shape = input_shape
@@ -31,6 +31,9 @@ class Generator:
         # class conditional stuff
         self.hyp = BasePlanner._hyp_tiling(FLAGS.num_classes_kn, self.B)  # [B * hyp, num_classes]
 
+        # for masked nll loss
+        self.correct_hypoths = tf.cast(tf.one_hot(y_MC, depth=FLAGS.num_classes_kn), tf.bool)  # [B, hyp]
+
     def _sample(self, h, min_std=1e-5):
         mu = self.mu_layer(h)
         sigma = self.sigma_layer(h)
@@ -40,7 +43,7 @@ class Generator:
         params = tf.stack([mu, sigma], axis=0)
         return params, dist, dist.sample()
 
-    def predict(self, r, hyp, prior_h, prior_z, true_img, out_shp=None):
+    def predict(self, r, hyp, prior_h, prior_z, out_shp=None):
         with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
             if out_shp is None:
                 out_shp = [self.B]
@@ -79,30 +82,40 @@ class Generator:
                     'sigma': None,
                     }
 
-            # broadcasting for nll loss
-            if len(out_shp) > 1:
-                true_img = tf.reshape(true_img, [self.B] + (len(out_shp) - 1) * [1] + true_img.get_shape().as_list()[1:])
-            # TODO: alternatively use annealing or learned std
-            dist = MSEDistribution(xhat['mu_probs'])
-            nll = -dist.log_prob(true_img)
-            nll = tf.reduce_sum(nll, axis=[-3, -2, -1])  # [B] or out_shp
-
             VAE_results = {'h': tf.stack(hs, axis=0),  # [L, B, H, W, n_filters]
                            'z': tf.stack(zs, axis=0),  # [L, mu/sigma, B, H, W, z_filter]
-                           'nll': nll,  # [B]
                            'KLdiv': tf.reshape(KLdiv, out_shp),  # [B]
                            }
 
         return VAE_results, xhat
 
-    def class_cond_predictions(self, r, prior_h, prior_z, img):
+    def masked_nll_loss(self, xhat_probs, true_img, out_shp, seen):
+        # # broadcasting for nll loss
+        if len(out_shp) > 1:
+            true_img = tf.reshape(true_img, [self.B] + (len(out_shp) - 1) * [1] + true_img.get_shape().as_list()[1:])
+        # TODO: alternatively use annealing or learned std
+        dist = MSEDistribution(xhat_probs)
+        nll = -dist.log_prob(true_img)
+
+        mask = tf.logical_or(self.correct_hypoths[:, :, tf.newaxis, tf.newaxis], seen[:, tf.newaxis, :, :])  # [B, hyp, H, W]
+        nll_masked = tf.where(mask[:, :, :, :, tf.newaxis], nll, tf.zeros_like(nll))  # [B, hyp, H, W, C]
+        nll_summed = tf.reduce_sum(nll_masked, axis=[-3, -2, -1])  # [B] or out_shp (reducing H, W, C)
+
+        return nll_summed  # [B]
+
+    def class_cond_predictions(self, r, prior_h, prior_z, img, seen):
         r_repeated = repeat_axis(r, axis=0, repeats=self.num_classes_kn)
+        out_shp = [self.B, self.num_classes_kn]
         VAE_results, obs_prior = self.predict(r=r_repeated,
                                               hyp=self.hyp,
                                               prior_h=prior_h,
                                               prior_z=prior_z,
-                                              true_img=img,
-                                              out_shp=[self.B, self.num_classes_kn])  # [B, hyp, height, width, C]
+                                              out_shp=out_shp)  # [B, hyp, height, width, C]
+        VAE_results['nll'] = self.masked_nll_loss(xhat_probs=obs_prior['mu_probs'],
+                                                  true_img=img,
+                                                  out_shp=out_shp,
+                                                  seen=seen)
+
         return VAE_results, obs_prior
 
     # @property

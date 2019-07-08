@@ -7,6 +7,14 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 import functools
 
+# annoying UserWarning from plt.imshow in _plot_seen()
+import warnings
+warnings.filterwarnings(
+    action='ignore',
+    category=UserWarning,
+    module=r'.*matplotlib'
+)
+
 logger = logging.getLogger()
 
 

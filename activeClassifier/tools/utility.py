@@ -53,13 +53,17 @@ class Utility(object):
         if FLAGS.planner == 'RL':
             assert FLAGS.rl_reward == 'clf'
 
+        if FLAGS.planner != 'ActInf':
+            FLAGS.actInfPolicy = None
+
+        if FLAGS.actInfPolicy == 'uniform_loc10':
+            assert FLAGS.rl_reward in ['clf', 'G']
+            assert ~FLAGS.rnd_first_glimpse  # not completely necessary, but seems to make sense
+
         if not FLAGS.use_pixel_obs_FE:
             assert (FLAGS.pixel_obs_discrete == 0)
 
-        if FLAGS.uniform_loc10:
-            assert FLAGS.planner == 'ActInf'
-            assert FLAGS.rl_reward in ['clf', 'G']
-            assert ~FLAGS.rnd_first_glimpse  # not completely necessary, but seems to make sense
+        FLAGS.init_loc_rng = min(FLAGS.init_loc_rng, FLAGS.max_loc_rng)
 
         # not including any potential unknown class (adjusted in get_data)
         FLAGS.num_classes_kn = FLAGS.num_classes
@@ -88,7 +92,12 @@ class Utility(object):
         experiment_name  = '{}gl_{}_{}_bs{}_MC{}_'.format(FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples)
         experiment_name += 'lr{}dc{}_'.format(FLAGS.learning_rate, FLAGS.learning_rate_decay_factor)
         experiment_name += '{}sc{}_glstd{}_{}_'.format(len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.gl_std, FLAGS.rnn_cell)
-        experiment_name += 'lstd{}to{}Rng{}_'.format(FLAGS.loc_std, FLAGS.loc_std_min, FLAGS.init_loc_rng) if not FLAGS.uniform_loc10 else 'uniformLoc10'
+        if (FLAGS.planner != 'ActInf') or (FLAGS.actInfPolicy == 'actInf'):
+            experiment_name += 'lstd{}to{}Rng{}_'.format(FLAGS.loc_std, FLAGS.loc_std_min, FLAGS.init_loc_rng)
+        elif FLAGS.actInfPolicy == 'uniform_loc10':
+            experiment_name += FLAGS.actInfPolicy + '_'
+        elif FLAGS.actInfPolicy == 'random':
+            experiment_name += FLAGS.actInfPolicy + '{}_'.format(FLAGS.init_loc_rng)
         experiment_name += 'preTr{}{}Uk{}_'.format(FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk) if FLAGS.pre_train_epochs else ''
         experiment_name += 'z{sz}{d}{kl}C{c}w{w}_fbN{n}_'.format(sz=FLAGS.size_z, d=FLAGS.z_dist, kl=FLAGS.z_B_kl, c=FLAGS.z_B_center, w=FLAGS.z_kl_weight, n=FLAGS.normalise_fb)
         experiment_name += '1stGlRnd' if FLAGS.rnd_first_glimpse else ''
@@ -153,7 +162,7 @@ class Utility(object):
         parser.add_argument('--freeze_policyNet', type=int, default=None, help='Number of epochs after which to freeze the policyNet weights. Set to None to ignore.')
         # locations
         parser.add_argument('--rnd_first_glimpse', type=int, default=1, choices=[0, 1], help='Whether to start with a random glimpse or plan it.')
-        parser.add_argument('--uniform_loc10', type=int, default=0, choices=[0, 1], help='Dont learn locations, instead always select from 10 evenly distributed ones. Only for ActInf planner.')
+        parser.add_argument('--actInfPolicy', type=str, default='actInf', choices=['random', 'uniform_loc10', 'actInf'], help='Policy for the actInfPlanner.')
         parser.add_argument('--max_loc_rng', type=float, default=1., help='In what range are the locations allowed to fall? (Max. is -1 to 1)')
         parser.add_argument('--loc_std', type=float, default=0.09, help='Std used to sample locations. Relative to whole image being in range (-1, 1).')
         parser.add_argument('--loc_std_min', type=float, default=0.09, help='Minimum loc_std, decaying exponentially (hardcoded decay rate).')
@@ -164,7 +173,7 @@ class Utility(object):
         #          'cartRel: diff(x,y) '
         #          'polarRel: r, theta')
         # more important settings
-        parser.add_argument('-p', '--planner', type=str, default='ActInf', choices=['ActInf', 'RL'], help='Planning strategy.')
+        parser.add_argument('-p', '--planner', type=str, default='ActInf', choices=['ActInf', 'RL', 'random'], help='Planning strategy.')
         parser.add_argument('--rl_reward', type=str, default='clf', choices=['clf', 'G1', 'G'], help='Rewards for ActInf location policy. For other planners always clf.')
         parser.add_argument('-bu', '--beliefUpdate', type=str, default='fb', choices=['fb', 'fc', 'RAM'], help='Belief update strategy.')
         parser.add_argument('--normalise_fb', type=int, default=0, choices=[0, 1, 2], help='Use min_normalisation for prediction fb or not. 1: divide by baseline, 1: subtract baseline')
@@ -182,6 +191,7 @@ class Utility(object):
         parser.add_argument('--use_conv', type=int, default=0, choices=[0, 1], help='Whether to use a convolutional encoder/decoder instead of fc.')
         parser.add_argument('--rnn_cell', type=str, default='GRU256', help='Type and size of the RNN cell. [GRU(), LSTM(), ConvLSTM, Add, ConvAdd] where () is the cell size.')
         parser.add_argument('--gl_std', type=int, default=1, help='-1 to learn the glimpse standard deviation in the decoder, value to set it constant.')
+        parser.add_argument('--gl_std_min', type=int, default=0.7, help='Minimum std to decay to. fullImgPred only atm. Only used if gl_std != 1. GQN: 0.7')
 
         parser.add_argument('-gl', '--num_glimpses', type=int, default=5, help='Number of glimpses the network is allowed to take. If learn_num_glimpses this is the max. number to take.')
         parser.add_argument('--resize_method', type=str, default="BILINEAR", choices=['AVG', 'BILINEAR', 'BICUBIC'], help='Method used to downsize the larger retina scales. AVG: average pooling')

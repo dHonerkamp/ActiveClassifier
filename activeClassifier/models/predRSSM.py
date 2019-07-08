@@ -10,6 +10,7 @@ from activeClassifier.modules.VAE.encoder import Encoder, EncoderConv
 from activeClassifier.modules.VAE.decoder import Decoder
 from activeClassifier.modules.planner.ActInfPlanner import ActInfPlanner
 from activeClassifier.modules.planner.REINFORCEPlanner import REINFORCEPlanner
+from activeClassifier.modules.planner.randomPlanner import RandomPlanner
 from activeClassifier.modules.stateTransition import StConvLSTM, StGRU, StAdditive, StLSTM
 from activeClassifier.modules.beliefUpdate import PredErrorUpdate, FullyConnectedUpdate, RAMUpdate
 
@@ -63,11 +64,12 @@ class predRSSM(base.Base):
                       'VAEEncoder': VAEencoder,
                       'VAEDecoder': VAEdecoder}
 
-        planner = policy if policy != 'random' else FLAGS.planner
-        if planner == 'ActInf':
+        if policy == 'ActInf':
             planner = ActInfPlanner(FLAGS, submodules, self.B, env.patch_shape_flat, stateTransition, self.C)
-        elif planner == 'RL':
+        elif policy == 'RL':
             planner = REINFORCEPlanner(FLAGS, submodules, self.B, env.patch_shape_flat, stateTransition, is_pre_phase=(FLAGS.planner!='RL'), labels=self.y_MC)
+        elif policy == 'random':
+            planner = RandomPlanner(FLAGS, submodules, self.B, env.patch_shape_flat, stateTransition)
         else:
             raise ValueError('Undefined planner.')
 
@@ -129,11 +131,7 @@ class predRSSM(base.Base):
                     current_state, next_decision, next_action, next_action_mean, next_exp_obs, pl_records = planner.initial_planning()
                     ta_d['current_c'] = self._write_zero_out(0, ta_d['current_c'], current_state['c'], last_done, 'current_c')
                 else:
-                    if policy == 'random':
-                        next_decision, next_action, next_action_mean, pl_records = planner.random_policy(FLAGS.init_loc_rng)
-                        next_exp_obs = planner.single_policy_prediction(last_state, last_z['mu'], next_action, glimpse_idx)
-                    else:
-                        next_decision, next_action, next_action_mean, next_exp_obs, pl_records = planner.planning_step(last_state, last_z['mu'], glimpse_idx, time, self.is_training, self.rnd_loc_eval)
+                    next_decision, next_action, next_action_mean, next_exp_obs, pl_records = planner.planning_step(last_state, last_z['mu'], glimpse_idx, time, self.is_training, self.rnd_loc_eval)
 
                     # TODO : Could REUSE FROM PLANNING STEP
                     current_state = stateTransition([last_z['mu'], next_action, glimpse_idx], last_state)
@@ -248,13 +246,13 @@ class predRSSM(base.Base):
                 self.classification = classification_decision
 
             with tf.name_scope('VAE'):
+                correct_hypoths = tf.cast(tf.one_hot(env.y_MC, depth=FLAGS.num_classes_kn), tf.bool)  # [B, hyp]
+
                 # posterior nll
                 nll_post = tf.reduce_sum(self.nll_posterior, 0)  # sum over time
                 nll_post = tf.reduce_mean(nll_post)  # mean over batch
 
                 # KLdiv: train model to predict glimpses where (i) the hyp is correct (ii) the location has previously been seen
-                correct_hypoths = tf.cast(tf.one_hot(env.y_MC, depth=FLAGS.num_classes_kn), tf.bool)  # [B, hyp]
-
                 incl_seen = True
                 if not incl_seen:
                     KLdivs_used = tf.boolean_mask(self.KLdivs, mask=correct_hypoths, axis=1)  # [T, ?]
@@ -265,10 +263,14 @@ class predRSSM(base.Base):
                                         lambda: policyNet.find_seen_locs(self.actions, FLAGS.num_glimpses, closeness=closeness),
                                         lambda: tf.zeros([FLAGS.num_glimpses, self.B], dtype=tf.bool),
                                         name='seen_locs_cond')
+
                     if FLAGS.uk_label is not None:
                         seen_locs = tf.logical_and(seen_locs, tf.not_equal(self.y_MC, FLAGS.uk_label)[tf.newaxis, :])
 
-                    mask = tf.logical_or(seen_locs[:, :, tf.newaxis], correct_hypoths[tf.newaxis, :, :])  # broadcast into [T, B, hyp]
+                    plausible_hyp = self.state_believes[:-1] >= (1 / FLAGS.num_classes_kn)  #  [T, B, hyp]
+                    seen_and_plausible = tf.logical_and(plausible_hyp, seen_locs[:, :, tf.newaxis])  # broadcast into [T, B, hyp]
+
+                    mask = tf.logical_or(seen_and_plausible, correct_hypoths[tf.newaxis, :, :])
                     # KLdivs_used = tf.boolean_mask(self.KLdivs, mask=mask)  # not shape preserving: [?]
                     KLdivs_used = tf.where(mask, self.KLdivs, tf.zeros_like(self.KLdivs))
                 self.KLdiv_sum = tf.reduce_sum(KLdivs_used) / tf.cast(self.B, tf.float32)  # sum over time
@@ -297,7 +299,7 @@ class predRSSM(base.Base):
             def drop_vars(collection, to_drop):
                 return list(set(collection) - set(to_drop))
 
-            if (policy == 'random') or FLAGS.uniform_loc10:  # don't train locationNet or location baseline
+            if (policy == 'random') or (FLAGS.actInfPolicy in ['random', 'uniform_loc10']):  # don't train locationNet or location baseline
                 pretrain_vars = (tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=VAEencoder.name)
                                  + tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=VAEdecoder.name)
                                  + stateTransition._cell.trainable_variables

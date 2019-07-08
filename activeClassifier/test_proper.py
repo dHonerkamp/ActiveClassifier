@@ -11,7 +11,7 @@ from activeClassifier.phase_config import get_phases
 from activeClassifier.training import run_phase
 from activeClassifier.modules.policyNetwork import PolicyNetwork
 
-from activeClassifier.modules.planner.base import BasePlanner
+from activeClassifier.modules.planner.basePlanner import BasePlanner
 
 
 class ObservationAveragingTest(tf.test.TestCase):

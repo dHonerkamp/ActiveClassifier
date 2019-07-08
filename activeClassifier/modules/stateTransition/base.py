@@ -8,6 +8,12 @@ class StateTransition:
         self._loc_dim = FLAGS.loc_dim
         self._B = batch_sz
 
+        self._img_shape = FLAGS.img_shape
+        self._scale_sizes = FLAGS.scale_sizes
+        ix, iy = tf.meshgrid(tf.range(self._img_shape[1]), tf.range(self._img_shape[0]))
+        self._ix, self._iy = tf.cast(ix[tf.newaxis], tf.float32), tf.cast(iy[tf.newaxis], tf.float32)  # each [1, 28, 28]
+
+
         self._cell = None
 
     def __call__(self, inputs, prev_state):
@@ -21,14 +27,32 @@ class StateTransition:
 
         next_s_output, next_s_state = self._cell(cell_input, prev_state['s_state'])
 
+        updated_seen = self._update_seen(prev_state['seen'], prev_state['l'])
+
         next_state = {'c': prev_state['c'],
                       'l': action,
                       's': tf.layers.flatten(next_s_output),
                       's_state': next_s_state,
                       'fb': prev_state['fb'],
-                      'uk_belief': prev_state['uk_belief']}
+                      'uk_belief': prev_state['uk_belief'],
+                      'seen'     : updated_seen}
 
         return next_state
+
+    def _update_seen(self, seen, loc):
+        """
+        Args:
+            loc: [B, loc_dim], where loc_dim = (y, x)
+        """
+        # from [-1, 1] into [0, img_shape - 1] range (-1 because of 0-indexing)
+        loc_pixel_x = ((self._img_shape[1] - 1) * loc[:, 1] + self._img_shape[1] - 1) / 2
+        loc_pixel_y = ((self._img_shape[0] - 1)* loc[:, 0] + self._img_shape[0] - 1) / 2
+        x_boundry = (loc_pixel_x - self._scale_sizes[0] / 2, loc_pixel_x + self._scale_sizes[0] / 2)
+        y_boundry = (loc_pixel_y - self._scale_sizes[0] / 2, loc_pixel_y + self._scale_sizes[0] / 2)
+
+        new = ((self._ix >= x_boundry[0][:, tf.newaxis, tf.newaxis]) & (self._ix <= x_boundry[1][:, tf.newaxis, tf.newaxis])
+               & (self._iy >= y_boundry[0][:, tf.newaxis, tf.newaxis]) & (self._iy <= y_boundry[1][:, tf.newaxis, tf.newaxis]))
+        return tf.logical_or(new, seen)
 
     def initial_state(self, batch_sz, initial_location):
         return {'c': tf.fill([batch_sz, self._num_classes_kn], 1. / self._num_classes_kn),
@@ -36,7 +60,8 @@ class StateTransition:
                 's': tf.layers.flatten(self._get_zero_cell_output(batch_sz)),  # output
                 's_state': self._cell.zero_state(batch_sz, dtype=tf.float32),  #
                 'fb': tf.zeros([batch_sz, self._num_classes_kn]),
-                'uk_belief': tf.zeros([batch_sz])}
+                'uk_belief': tf.zeros([batch_sz]),
+                'seen'     : tf.zeros([self._B] + self._img_shape[:2], dtype=tf.bool)}
 
     @property
     def state_size(self):

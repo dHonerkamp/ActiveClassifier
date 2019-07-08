@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow import distributions as tfd
 
-from activeClassifier.modules.planner.base import BasePlanner
+from activeClassifier.modules.planner.basePlanner import BasePlanner
 from activeClassifier.tools.tf_tools import repeat_axis, binary_entropy, differential_entropy_normal, differential_entropy_diag_normal
 
 
@@ -17,7 +17,7 @@ class ActInfPlanner(BasePlanner):
         self.B = batch_sz
         self.C = C
         self.alpha = FLAGS.precision_alpha
-        self.uniform_loc10 = FLAGS.uniform_loc10
+        self.actInfPolicy = FLAGS.actInfPolicy
 
         # No need to tile at every step
         self.hyp = self._hyp_tiling(FLAGS.num_classes_kn, self.B * self.n_policies)  # [B * n_policies * hyp, num_classes]
@@ -130,8 +130,10 @@ class ActInfPlanner(BasePlanner):
         return decision, selected_action, selected_action_mean, selected_exp_obs, selected_action_idx
 
     def _location_planning(self, inputs, is_training, rnd_loc_eval):
-        if self.uniform_loc10:
+        if self.actInfPolicy == 'uniform_loc10':
             next_actions, next_actions_mean = self.m['policyNet'].uniform_loc_10(self.n_policies)
+        elif self.actInfPolicy == "random":
+            next_actions, next_actions_mean = self.m['policyNet'].random_loc(shp=[self.B, self.n_policies])
         else:
             next_actions, next_actions_mean = self.m['policyNet'].next_actions(inputs=inputs, is_training=is_training,
                                                                                n_policies=self.n_policies)  # [B, n_policies, loc_dim]

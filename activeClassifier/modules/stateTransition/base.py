@@ -13,7 +13,6 @@ class StateTransition:
         ix, iy = tf.meshgrid(tf.range(self._img_shape[1]), tf.range(self._img_shape[0]))
         self._ix, self._iy = tf.cast(ix[tf.newaxis], tf.float32), tf.cast(iy[tf.newaxis], tf.float32)  # each [1, 28, 28]
 
-
         self._cell = None
 
     def __call__(self, inputs, prev_state):
@@ -21,16 +20,16 @@ class StateTransition:
         Returns:
             output, next_state
         """
-        z, action, glimpse_idx = inputs
+        z, next_action, glimpse_idx = inputs
 
-        cell_input = self._get_cell_input(z, glimpse_idx, action)
+        cell_input = self._get_cell_input(z, glimpse_idx, prev_state['l'], next_action)
 
         next_s_output, next_s_state = self._cell(cell_input, prev_state['s_state'])
 
         updated_seen = self._update_seen(prev_state['seen'], prev_state['l'])
 
         next_state = {'c': prev_state['c'],
-                      'l': action,
+                      'l': next_action,
                       's': tf.layers.flatten(next_s_output),
                       's_state': next_s_state,
                       'fb': prev_state['fb'],
@@ -81,7 +80,7 @@ class StateTransition:
     def _get_zero_cell_output(self, batch_sz):
         raise NotImplementedError("Abstract method")
 
-    def _get_cell_input(self, z, glimpse_idx, action):
+    def _get_cell_input(self, z, glimpse_idx, last_action, next_action):
         raise NotImplementedError("Abstract method")
 
 

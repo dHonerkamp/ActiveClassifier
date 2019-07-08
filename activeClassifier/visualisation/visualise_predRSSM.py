@@ -10,6 +10,14 @@ logger = logging.getLogger()
 from activeClassifier.visualisation.base import Visualiser, visualisation_level
 from activeClassifier.tools.utility import softmax
 
+# annoying UserWarning from plt.imshow in _glimpse_patches_until_t()
+import warnings
+warnings.filterwarnings(
+    action='ignore',
+    category=UserWarning,
+    module=r'.*matplotlib'
+)
+
 
 class Visualization_predRSSM(Visualiser):
     def __init__(self, model, FLAGS):
@@ -30,6 +38,7 @@ class Visualization_predRSSM(Visualiser):
 
         self.plot_overview(d, nr_obs_overview, suffix)
         self.plot_reconstr(d, nr_obs_reconstr, suffix)
+        self.plot_reconstr_patches(d, nr_obs_reconstr, suffix)
 
         # moved to batch-wise:
         # self.plot_stateBelieves(d, suffix)
@@ -91,6 +100,120 @@ class Visualization_predRSSM(Visualiser):
             [ax.set_axis_off() for ax in axes.ravel()]
             self._save_fig(f, folder_name, '{}{}_n{}{isuk}.png'.format(self.prefix, suffix, i,
                                                                        isuk='_uk' if (d['y'][i] == self.uk_label) else ''))
+
+    @visualisation_level(1)
+    def plot_reconstr_patches(self, d, nr_examples, suffix='', folder_name='reconstr_patches'):
+        def get_title_color(post_believes, hyp):
+            if post_believes[hyp] == post_believes.max():
+                color = 'magenta'
+            elif post_believes[hyp] > 0.1:
+                color = 'blue'
+            else:
+                color = 'black'
+            return color
+
+        nax = 2 + self.num_classes_kn
+
+        gl = self._glimpse_reshp(d['glimpse'])  # [T, B, scale[0], scales*scale[0]]
+        gl_post = self._glimpse_reshp(d['reconstr_posterior'])  # [T, B, scale[0], scales*scale[0]]
+        gl_preds = self._glimpse_reshp(d['reconstr_prior'])  # [T, B, hyp, scale[0], scales*scale[0]]
+
+        idx_examples = self._get_idx_examples(d['y'], nr_examples, replace=False)
+
+        for i in idx_examples:
+            f, axes = plt.subplots(self.num_glimpses, nax, figsize=(4 * self.num_scales * nax, 4 * (self.num_glimpses + 1)))
+            axes = axes.reshape([self.num_glimpses, nax])
+            self._plot_img_plus_locs(axes[0, 0], d['x'][i], d['y'][i], d['clf'][i], d['locs'][:, i, :], d['decisions'][:, i])
+
+            # rank hypotheses by final believes
+            T = np.argmax(d['decisions'][:, i])  # all non-decisions are -1
+            ranked_hyp = np.argsort(-d['state_believes'][T, i, :])
+
+            for t in range(self.num_glimpses - 1):
+                # true glimpses up until and including t
+                self._plot_seen(d['x'][i], d['locs'][:, i], until_t=min(t + 1, self.num_glimpses), ax=axes[t + 1, 0])
+                title = 'Label: {}, clf: {}'.format(self.lbl_map[d['y'][i]], self.lbl_map[d['clf'][i]])
+                if self.uk_label is not None:
+                    title += ', p(uk): {:.2f}'.format(d['uk_belief'][t, i])
+                axes[t + 1, 0].set_title(title)
+                # posterior
+                self._glimpse_patches_until_t(t+1, gl[:, i], gl_post[:, i], d['locs'][:, i], axes[t + 1, 1])
+                axes[t + 1, 1].set_title('Posterior, nll: {:.2f}'.format(d['nll_posterior'][t, i]))
+                # prior for all classes
+                ranks_overall = np.argsort(-d['state_believes'][t, i, :])
+                ranks_kl = np.argsort(d['KLdivs'][t, i, :])
+                ps_kl = softmax(-d['KLdivs'][t, i, :])
+                for j, hyp in enumerate(ranked_hyp):
+                    self._glimpse_patches_until_t(min(t + 1, self.num_glimpses), gl[:, i], gl_preds[:, i, hyp], d['locs'][:, i], axes[t + 1, j + 2])
+                    if d['decisions'][t, i] != -1:
+                        axes[t + 1, j + 2].set_title('Decision: {}'.format(d['decisions'][t, i]))
+                    else:
+                        c = get_title_color(d['state_believes'][min(t + 1, self.num_glimpses), i, :], hyp)
+                        axes[t + 1, j + 2].set_title('{}: tot. rank pre: {}, kl rank: {}\nsftmx(KL): {:.2f}, KL: {:.2f}, post-c: {:.2f}'.format(
+                                                            self.lbl_map[hyp], ranks_overall[hyp], ranks_kl[hyp],
+                                                            ps_kl[hyp], d['KLdivs'][t, i, hyp], d['state_believes'][t + 1, i, hyp]),
+                                                     color=c)
+
+            [(ax.set_xticks([]), ax.set_yticks([]), ax.set_ylim([self.img_shape[0] - 1, 0]), ax.set_xlim([0, self.img_shape[1] - 1])) for ax in axes.ravel()]
+            [ax.set_axis_off() for ax in axes[0].ravel()]
+            self._save_fig(f, folder_name, '{}{}_n{}{isuk}.png'.format(self.prefix, suffix, i,
+                                                                       isuk='_uk' if (d['y'][i] == self.uk_label) else ''))
+
+    def _stick_glimpse_onto_canvas(self, glimpse, loc):
+        img_y, img_x = self.img_shape[:2]
+        loc_y, loc_x = loc
+        half_width = self.scale_sizes[0] / 2
+        assert len(self.scale_sizes) == 1, 'Not adjusted for multiple scales yet'
+
+        # Adjust glimpse if going over the edge
+        y_overlap_left = -int(min(round(loc_y - half_width), 0))
+        y_overlap_right = int(img_y - round(loc_y + half_width)) if ((round(loc_y + half_width) - img_y) > 0) else None
+        x_overlap_left = -int(min(round(loc_x - half_width), 0))
+        x_overlap_right = int(img_x - round(loc_x + half_width)) if ((round(loc_x + half_width) - img_x) > 0) else None
+        glimpse = glimpse[y_overlap_left : y_overlap_right,
+                          x_overlap_left : x_overlap_right]
+
+        # Boundaries of the glimpse
+        x_boundry_left  = int(max(round(loc_x - half_width), 0))
+        x_boundry_right = int(min(round(loc_x + half_width), img_x))
+        y_boundry_left  = int(max(round(loc_y - half_width), 0))
+        y_boundry_right = int(min(round(loc_y + half_width), img_y))
+
+        # Pad up to canvas size
+        if self.img_shape[2] == 1:
+            glimpse_padded = np.pad(glimpse, [(y_boundry_left, img_y - y_boundry_right),
+                                              (x_boundry_left, img_x - x_boundry_right)],
+                                    mode='constant')
+        else:
+            glimpse_padded = np.pad(glimpse, [(y_boundry_left, img_y - y_boundry_right),
+                                              (x_boundry_left, img_x - x_boundry_right),
+                                              (0, 0)],
+                                    mode='constant')
+        assert glimpse_padded.shape == tuple(self.img_shape_squeezed)
+        return glimpse_padded
+
+    def _glimpse_patches_until_t(self, until_t, true_glimpses, glimpses, locs, ax):
+        """Plot the true_glimpses[:until_t - 2] & glimpses[until_t - 1] onto a canvas of shape img_shape, with the latest glimpses overlapping older ones (important for predictions)"""
+        ix, iy = np.meshgrid(np.arange(self.img_shape[0]), np.arange(self.img_shape[1]))
+        half_width = self.scale_sizes[0] / 2
+        seen = np.zeros(self.img_shape[:2], np.bool)
+        glimpse_padded = np.zeros(self.img_shape_squeezed)
+
+        for t in range(until_t):
+            loc = locs[t, :]
+            y_boundry = [loc[0] - half_width, loc[0] + half_width]
+            x_boundry = [loc[1] - half_width, loc[1] + half_width]
+            new = (ix >= round(x_boundry[0])) & (ix < round(x_boundry[1])) & (iy >= round(y_boundry[0])) & (iy < round(y_boundry[1]))
+            seen[new] = True
+
+            input = glimpses if (t == until_t - 1) else true_glimpses
+            new_glimpse_padded = self._stick_glimpse_onto_canvas(input[t], locs[t])
+            glimpse_padded = np.where(new, new_glimpse_padded, glimpse_padded)
+
+        glimpse_padded_seen = np.ma.masked_where(~seen, glimpse_padded)
+        ax.imshow(glimpse_padded_seen, cmap='gray')
+        half_pixel = 0.5 if (self.scale_sizes[0] % 2 == 0) else 0  # glimpses are rounded to pixel values do the same for the rectangle to make it fit nicely
+        ax.add_patch(Rectangle(np.round(locs[until_t - 1, ::-1] - half_width) - half_pixel, width=self.scale_sizes[0], height=self.scale_sizes[0], edgecolor='blue', facecolor='none'))
 
     # @visualisation_level(2)
     # def plot_planning(self, d, nr_examples, suffix='', folder_name='planning'):

@@ -93,30 +93,38 @@ class ActInfPlanner(BasePlanner):
         return dec_G
 
     def _action_selection(self, next_actions, next_actions_mean, new_state, G, exp_obs_prior, time, is_training):
-        # TODO: use pi = softmax(-F - gamma*G) instead?
-        gamma = 1
-        pi_logits = tf.nn.log_softmax(gamma * G)
-        # Incorporate past into the decision. But what to use for the 2 decision actions?
-        # pi_logits = tf.nn.log_softmax(tf.log(new_state['c']) + gamma * G)
+        # TODO: should uniform_loc10 take random decisions or not?
+        if self.actInfPolicy in ['random', 'uniform_loc10']:
+            selected_action_idx = tf.random_uniform(shape=[self.B], minval=0, maxval=self.n_policies, dtype=tf.int32)
+            if time < (self.num_glimpses - 1):
+                decision = tf.fill([self.B], -1)
+            else:
+                decision = self._best_believe(new_state)
+        else:
+            # TODO: use pi = softmax(-F - gamma*G) instead?
+            gamma = 1
+            pi_logits = tf.nn.log_softmax(gamma * G)
+            # Incorporate past into the decision. But what to use for the 2 decision actions?
+            # pi_logits = tf.nn.log_softmax(tf.log(new_state['c']) + gamma * G)
 
-        # TODO: precision?
-        # TODO: which version of action selection?
-        # Visual foraging code: a_t ~ softmax(alpha * log(softmax(-F - gamma * G))) with alpha=512
-        # Visual foraging paper: a_t = min_a[ o*_t+1 * [log(o*_t+1) - log(o^a_t+1)] ]
-        # Maze code: a_t ~ softmax(gamma * G) [summed over policies with the same next action]
-        selected_action_idx = tf.cond(is_training,
-                                      lambda: tfd.Categorical(logits=self.alpha * pi_logits, allow_nan_stats=False).sample(),
-                                      lambda: tf.argmax(G, axis=1, output_type=tf.int32),
-                                      name='sample_action_cond')
-        # give back the action itself, not its index. Differentiate between decision and location actions
-        best_belief = self._best_believe(new_state)
-        dec = tf.equal(selected_action_idx, self.n_policies)  # the last action is the decision
-        selected_action_idx = tf.where(tf.stop_gradient(dec), tf.fill([self.B], 0), selected_action_idx)  # replace decision indeces (which exceed the shape of selected_action), so we can use gather on the locations
+            # TODO: precision?
+            # TODO: which version of action selection?
+            # Visual foraging code: a_t ~ softmax(alpha * log(softmax(-F - gamma * G))) with alpha=512
+            # Visual foraging paper: a_t = min_a[ o*_t+1 * [log(o*_t+1) - log(o^a_t+1)] ]
+            # Maze code: a_t ~ softmax(gamma * G) [summed over policies with the same next action]
+            selected_action_idx = tf.cond(is_training,
+                                          lambda: tfd.Categorical(logits=self.alpha * pi_logits, allow_nan_stats=False).sample(),
+                                          lambda: tf.argmax(G, axis=1, output_type=tf.int32),
+                                          name='sample_action_cond')
+            # give back the action itself, not its index. Differentiate between decision and location actions
+            best_belief = self._best_believe(new_state)
+            dec = tf.equal(selected_action_idx, self.n_policies)  # the last action is the decision
+            selected_action_idx = tf.where(tf.stop_gradient(dec), tf.fill([self.B], 0), selected_action_idx)  # replace decision indeces (which exceed the shape of selected_action), so we can use gather on the locations
 
-        decision = tf.cond(tf.equal(time, self.num_glimpses - 1),
-                           lambda: best_belief,  # always take a decision at the last time step
-                           lambda: tf.where(dec, best_belief, tf.fill([self.B], -1)),
-                           name='last_t_decision_cond')
+            decision = tf.cond(tf.equal(time, self.num_glimpses - 1),
+                               lambda: best_belief,  # always take a decision at the last time step
+                               lambda: tf.where(dec, best_belief, tf.fill([self.B], -1)),
+                               name='last_t_decision_cond')
 
         if self.n_policies == 1:
             selected_action, selected_action_mean = next_actions, next_actions_mean
@@ -186,6 +194,7 @@ class ActInfPlanner(BasePlanner):
                                           axis=0, repeats=self.num_classes_kn)  # [B, n_policies, loc] -> [B * n_policies, loc] -> [B * n_policies * hyp, loc]
                 exp_obs_prior_enc = self.m['VAEEncoder'].calc_prior([self.hyp, new_s_tiled, new_l_tiled],
                                                                     out_shp=[self.B, self.n_policies, self.num_classes_kn])
+
                 if not self.use_pixel_obs_FE:
                     exp_obs_prior_logits = exp_obs_prior_enc['mu']
                     exp_obs_prior_sigma = exp_obs_prior_enc['sigma']

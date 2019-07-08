@@ -8,9 +8,10 @@ class StGRU(StateTransition):
         cell_size = int(FLAGS.rnn_cell.replace('GRU', ''))
         self._cell = tf.nn.rnn_cell.GRUCell(cell_size)
 
-    def _get_cell_input(self, z, glimpse_idx, action):
-        # input = tf.concat([z, action], axis=-1)  # cannot control the outputs based on inputs. So don't give it the next action
-        return z
+    def _get_cell_input(self, z, glimpse_idx, last_action, next_action):
+        # input = tf.concat([z, next_action], axis=-1)  # cannot control the outputs based on inputs. So don't give it the next action
+        input = tf.concat([z, last_action], axis=-1)
+        return input
 
     def _get_zero_cell_output(self, batch_sz):
         return self._cell.zero_state(batch_sz, dtype=tf.float32)

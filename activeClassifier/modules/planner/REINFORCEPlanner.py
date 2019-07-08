@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from activeClassifier.modules.planner.base import BasePlanner
+from activeClassifier.modules.planner.basePlanner import BasePlanner
 
 
 class REINFORCEPlanner(BasePlanner):

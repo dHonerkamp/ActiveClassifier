@@ -8,9 +8,9 @@ class StLSTM(StateTransition):
         cell_size = int(FLAGS.rnn_cell.replace('LSTM', ''))
         self._cell = tf.nn.rnn_cell.LSTMCell(cell_size)
 
-    def _get_cell_input(self, z, glimpse_idx, action):
-        # input = tf.concat([z, action], axis=-1)
-        input = tf.concat([z], axis=-1)
+    def _get_cell_input(self, z, glimpse_idx, last_action, next_action):
+        input = tf.concat([z, last_action], axis=-1)
+        # input = tf.concat([z], axis=-1)
         return input
 
     def _get_zero_cell_output(self, batch_sz):

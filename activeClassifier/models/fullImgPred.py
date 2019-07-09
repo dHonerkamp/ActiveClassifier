@@ -62,7 +62,7 @@ class fullImgPred(base.Base):
         out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='rewards'))
         out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='baselines'))
         out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses+1, dynamic_size=False, name='current_c'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='uk_belief'))
+        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses+1, dynamic_size=False, name='uk_belief'))
         out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='fb'))
         # out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='bl_surprise'))
         out_ta.append(tf.TensorArray(tf.bool,    size=FLAGS.num_glimpses, dynamic_size=False, name='done'))
@@ -85,7 +85,7 @@ class fullImgPred(base.Base):
         with tf.name_scope('Main_loop'):
             for time in range(FLAGS.num_glimpses):
                 # expected scene
-                VAE_results, next_exp_obs = generatorNet.class_cond_predictions(last_state['s'], prior_h, prior_z, env.img_NHWC, last_state['seen'])
+                VAE_results, next_exp_obs = generatorNet.class_cond_predictions(last_state['s'], prior_h, prior_z, env.img_NHWC, last_state['seen'], last_state['c'])
 
                 next_decision, next_action, pl_records = planner.planning_step(last_state, next_exp_obs, time)
 
@@ -111,12 +111,13 @@ class fullImgPred(base.Base):
                 ta_d['baselines']                = self._write_zero_out(time, ta_d['baselines'], baseline, last_done, 'baselines')  # this baseline is taken before the decision/observation! Same indexed rewards are taken after!
                 ta_d['rewards']                  = self._write_zero_out(time, ta_d['rewards'], corr_classification_fb, last_done, 'rewards')
                 # ta_d['belief_loss']              = self._write_zero_out(time, ta_d['belief_loss'], belief_loss, last_done, 'belief_loss')
-                # t=0 to T
                 for k, v in pl_records.items():
                     if FLAGS.debug: print(time, k, v.shape)
                     ta_d[k] = self._write_zero_out(time, ta_d[k], v, done, k)
-                ta_d['current_c'] = self._write_zero_out(time + 1, ta_d['current_c'], current_state['c'], last_done, 'current_c')  # ONLY ONE t=0 TO T
-                ta_d['uk_belief'] = self._write_zero_out(time, ta_d['uk_belief'], current_state['uk_belief'], last_done, 'uk_belief')
+                # t=0 to T
+                ta_d['current_c'] = self._write_zero_out(time + 1, ta_d['current_c'], current_state['c'], done, 'current_c')  # ONLY ONE t=0 TO T
+                ta_d['uk_belief'] = self._write_zero_out(time + 1, ta_d['uk_belief'], current_state['uk_belief'], done, 'uk_belief')
+                # TODO: SHOULD THESE BE done INSTEAD OF last_done??
                 ta_d['KLdivs'] = self._write_zero_out(time, ta_d['KLdivs'], VAE_results['KLdiv'], last_done, 'KLdivs')  # [B, hyp]
                 ta_d['nll'] = self._write_zero_out(time, ta_d['nll'], VAE_results['nll'], last_done, 'nll')  # [B, n_policies]
                 # copy forward
@@ -139,10 +140,12 @@ class fullImgPred(base.Base):
             rewards = ta_d['rewards'].stack()
             done = ta_d['done'].stack()
             nll = ta_d['nll'].stack()  # [T,B,hyp]
-            self.KLdiv_sum = ta_d['KLdivs'].stack()  # [T,B,hyp]
+            KLdiv_sum = ta_d['KLdivs'].stack()  # [T,B,hyp]
+            ##########
             # LOSS IS ONLY INTERESTED IN POSTERIOR VALUES. POSTERIOR IS ALWAYS given the next glimpse, i.e. t+1 -> shift by -1 and append with zeros for the decision timestep
+            ##########
             self.nll = tf.concat([nll[1:], tf.zeros_like(nll[0])[tf.newaxis]], axis=0)
-            self.KLdivs = tf.concat([self.KLdiv_sum[1:], tf.zeros_like(self.KLdiv_sum[0])[tf.newaxis]], axis=0)
+            self.KLdivs = tf.concat([KLdiv_sum[1:], tf.zeros_like(KLdiv_sum[0])[tf.newaxis]], axis=0)
 
             self.state_believes = ta_d['current_c'].stack()  # [T+1,B,hyp]
             self.G = ta_d['G'].stack()  # [T,B,n_policies incl. correct/wrong fb]
@@ -151,7 +154,7 @@ class fullImgPred(base.Base):
             current_s = ta_d['current_s'].stack()  # [T,B,rnn]
             self.fb = ta_d['fb'].stack()  # [T,B,hyp]
             # bl_surprise = ta_d['bl_surprise'].stack()  # [T,B]
-            self.uk_belief = ta_d['uk_belief'].stack()  # [T,B]
+            self.uk_belief = ta_d['uk_belief'].stack()  # [T+1,B]
             # belief_loss = ta_d['belief_loss'].stack()  # [T,B]
 
             # further records for debugging
@@ -182,10 +185,12 @@ class fullImgPred(base.Base):
                 correct_hypoths = tf.cast(tf.one_hot(env.y_MC, depth=FLAGS.num_classes_kn), tf.bool)  # [B, hyp]
 
                 # posterior nll
-                # TODO: reconstruct the seen parts for ll hyp?
                 nll_post_sum_T = tf.reduce_sum(self.nll, 0)  # sum over time, [B, hyp]
-                nll_post_used = tf.boolean_mask(nll_post_sum_T, mask=correct_hypoths, axis=0)  # [?]
-                nll_post = tf.reduce_mean(nll_post_used)  # mean over batch
+                # NOTE: nll masking moved into generator
+                # TODO: meaning that nll_loss displayed in visualisation is wrong
+                # nll_post_used = tf.boolean_mask(nll_post_sum_T, mask=correct_hypoths, axis=0)  # [?]
+                # nll_post = tf.reduce_mean(nll_post_used)  # mean over batch
+                nll_post = tf.reduce_mean(nll_post_sum_T)  # mean over batch
 
                 # KLdiv: train model to predict glimpses where (i) the hyp is correct (ii) the location has previously been seen
                 incl_seen = False

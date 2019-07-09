@@ -3,7 +3,7 @@ from tensorflow.contrib.rnn import Conv2DLSTMCell
 
 from activeClassifier.tools.MSE_distribution import MSEDistribution
 from activeClassifier.tools.tf_tools import repeat_axis
-from activeClassifier.modules.planner.base import BasePlanner
+from activeClassifier.modules.planner.basePlanner import BasePlanner
 
 
 class Generator:
@@ -33,6 +33,14 @@ class Generator:
 
         # for masked nll loss
         self.correct_hypoths = tf.cast(tf.one_hot(y_MC, depth=FLAGS.num_classes_kn), tf.bool)  # [B, hyp]
+
+        # decaying std
+        if (FLAGS.gl_std != 1):
+            self.gl_std = tf.train.polynomial_decay(FLAGS.gl_std, tf.train.get_global_step(),
+                                                  decay_steps=FLAGS.num_epochs * FLAGS.train_batches_per_epoch,
+                                                  end_learning_rate=FLAGS.gl_std_min)
+        else:
+            self.gl_std = None
 
     def _sample(self, h, min_std=1e-5):
         mu = self.mu_layer(h)
@@ -89,21 +97,53 @@ class Generator:
 
         return VAE_results, xhat
 
-    def masked_nll_loss(self, xhat_probs, true_img, out_shp, seen):
-        # # broadcasting for nll loss
-        if len(out_shp) > 1:
+    def _mask_loss(self, nll, seen, class_believes, mask_type):
+        """
+        Mask unseen regions of incorrect hyp by setting them to zero
+
+        Args:
+            nll: [B, hyp, H, W, C]
+            seen: [B, hyp, H, W]
+            class_believes: [B, hyp]
+        """
+        mask = self.correct_hypoths[:, :, tf.newaxis, tf.newaxis]  # [B, hyp, H, W]
+
+        if mask_type == 'probable_seen':
+            probable_hyps = (class_believes >= (1. / self.num_classes_kn))
+            probable_hyps = tf.stop_gradient(probable_hyps )
+            seen_and_probable = tf.logical_and(seen[:, tf.newaxis, :, :], probable_hyps[:, :, tf.newaxis, tf.newaxis])  # [B, hyp, H, W]
+            mask = tf.logical_or(mask, seen_and_probable)  # [B, hyp, H, W]
+            mask = mask[:, :, :, :, tf.newaxis]
+        elif mask_type == 'seen':
+            mask = tf.logical_or(mask, seen[:, tf.newaxis, :, :])  # [B, hyp, H, W]
+            mask = mask[:, :, :, :, tf.newaxis]
+        else:
+            # broadcast into right shape
+            mask = tf.logical_and(tf.ones_like(nll, dtype=tf.bool), mask[:, :, :, :, tf.newaxis])
+
+        nll_masked = tf.where(mask, nll, tf.zeros_like(nll))  # [B, hyp, H, W, C]
+        return nll_masked
+
+    def nll_loss(self, xhat_probs, true_img, out_shp, seen, class_believes):
+        if len(out_shp) > 1:  # broadcasting for nll loss
             true_img = tf.reshape(true_img, [self.B] + (len(out_shp) - 1) * [1] + true_img.get_shape().as_list()[1:])
         # TODO: alternatively use annealing or learned std
-        dist = MSEDistribution(xhat_probs)
+        if self.gl_std is None:
+            dist = MSEDistribution(xhat_probs)
+        else:  # decaying std
+            dist = tf.distributions.Normal(loc=xhat_probs, scale=self.gl_std)
         nll = -dist.log_prob(true_img)
 
-        mask = tf.logical_or(self.correct_hypoths[:, :, tf.newaxis, tf.newaxis], seen[:, tf.newaxis, :, :])  # [B, hyp, H, W]
-        nll_masked = tf.where(mask[:, :, :, :, tf.newaxis], nll, tf.zeros_like(nll))  # [B, hyp, H, W, C]
+        # TODO: implement properly
+        mask_type = 'seen'
+        nll_masked = self._mask_loss(nll, seen, class_believes, mask_type=mask_type)
+
         nll_summed = tf.reduce_sum(nll_masked, axis=[-3, -2, -1])  # [B] or out_shp (reducing H, W, C)
 
         return nll_summed  # [B]
 
-    def class_cond_predictions(self, r, prior_h, prior_z, img, seen):
+
+    def class_cond_predictions(self, r, prior_h, prior_z, img, seen, class_believes):
         r_repeated = repeat_axis(r, axis=0, repeats=self.num_classes_kn)
         out_shp = [self.B, self.num_classes_kn]
         VAE_results, obs_prior = self.predict(r=r_repeated,
@@ -111,10 +151,11 @@ class Generator:
                                               prior_h=prior_h,
                                               prior_z=prior_z,
                                               out_shp=out_shp)  # [B, hyp, height, width, C]
-        VAE_results['nll'] = self.masked_nll_loss(xhat_probs=obs_prior['mu_probs'],
+        VAE_results['nll'] = self.nll_loss(xhat_probs=obs_prior['mu_probs'],
                                                   true_img=img,
                                                   out_shp=out_shp,
-                                                  seen=seen)
+                                                  seen=seen,
+                                                  class_believes=class_believes)
 
         return VAE_results, obs_prior
 

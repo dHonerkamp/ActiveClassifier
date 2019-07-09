@@ -101,8 +101,6 @@ class Utility(object):
         experiment_name += 'preTr{}{}Uk{}_'.format(FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk) if FLAGS.pre_train_epochs else ''
         experiment_name += 'z{sz}{d}{kl}C{c}w{w}_fbN{n}_'.format(sz=FLAGS.size_z, d=FLAGS.z_dist, kl=FLAGS.z_B_kl, c=FLAGS.z_B_center, w=FLAGS.z_kl_weight, n=FLAGS.normalise_fb)
         experiment_name += '1stGlRnd' if FLAGS.rnd_first_glimpse else ''
-        if FLAGS.use_conv:
-            experiment_name += '_CNN'
         if FLAGS.planner == 'ActInf':
             experiment_name += '_c{}a{}p{}{}'.format(FLAGS.prior_preference_c, FLAGS.precision_alpha, FLAGS.prior_preference_glimpses, FLAGS.rl_reward)
             experiment_name += 'pixel{}bins'.format(FLAGS.pixel_obs_discrete) if FLAGS.use_pixel_obs_FE else ''
@@ -188,7 +186,6 @@ class Utility(object):
         parser.add_argument('--z_kl_weight', type=float, default=1., help='Weighting the kl term up or down.')
         parser.add_argument('--z_B_center', type=int, default=0, choices=[0, 1], help='Bernoulli latent code only: center the logits.')
         parser.add_argument('--num_hidden_fc', type=int, default=512, help='Standard size of fully connected layers.')
-        parser.add_argument('--use_conv', type=int, default=0, choices=[0, 1], help='Whether to use a convolutional encoder/decoder instead of fc.')
         parser.add_argument('--rnn_cell', type=str, default='GRU256', help='Type and size of the RNN cell. [GRU(), LSTM(), ConvLSTM, Add, ConvAdd] where () is the cell size.')
         parser.add_argument('--gl_std', type=int, default=1, help='-1 to learn the glimpse standard deviation in the decoder, value to set it constant.')
         parser.add_argument('--gl_std_min', type=int, default=0.7, help='Minimum std to decay to. fullImgPred only atm. Only used if gl_std != 1. GQN: 0.7')

@@ -17,7 +17,6 @@ class Encoder:
         self.z_dist = FLAGS.z_dist
         self._min_stddev = 1e-5
         self._kwargs = dict(units=FLAGS.num_hidden_fc, activation=tf.nn.relu)
-        self.use_conv = FLAGS.use_conv
         self.patch_shape = patch_shape
         self.calc_prior = tf.make_template(self.name + '/prior', self._prior)
         self.calc_post  = tf.make_template(self.name + '/posterior', self._posterior)
@@ -92,18 +91,10 @@ class Encoder:
         return out
 
     def _posterior(self, glimpse, l, s):
-        if self.use_conv:
-            glimpse = self._unflatten_glimpse(glimpse)
-            hidden = tf.layers.conv2d(glimpse, filters=32, kernel_size=[3, 3], padding='valid', activation=tf.nn.relu)
-            hidden = tf.layers.conv2d(hidden, filters=32, kernel_size=[2, 2], padding='valid', activation=tf.nn.relu)
-        else:
-            input = glimpse
-            # input = tf.concat([glimpse, s], axis=-1)
-            hidden = tf.layers.dense(input, **self._kwargs)
-        hidden =  FiLM_layer(l, hidden, conv_input=self.use_conv)
-
-        if self.use_conv:
-            hidden = tf.layers.flatten(hidden)
+        input = glimpse
+        # input = tf.concat([glimpse, s], axis=-1)
+        hidden = tf.layers.dense(input, **self._kwargs)
+        hidden =  FiLM_layer(l, hidden, conv_input=False)
 
         mu = tf.layers.dense(hidden, units=self.size_z, activation=None, name='mu')
 

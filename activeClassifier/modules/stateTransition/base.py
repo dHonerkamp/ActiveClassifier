@@ -20,16 +20,16 @@ class StateTransition:
         Returns:
             output, next_state
         """
-        z, next_action, glimpse_idx = inputs
+        z, current_action, glimpse_idx = inputs
 
-        cell_input = self._get_cell_input(z, glimpse_idx, prev_state['l'], next_action)
+        cell_input = self._get_cell_input(z, glimpse_idx, current_action)
 
         next_s_output, next_s_state = self._cell(cell_input, prev_state['s_state'])
 
-        updated_seen = self._update_seen(prev_state['seen'], prev_state['l'])
+        updated_seen = self._update_seen(prev_state['seen'], current_action)
 
         next_state = {'c': prev_state['c'],
-                      'l': next_action,
+                      'l': current_action,
                       's': tf.layers.flatten(next_s_output),
                       's_state': next_s_state,
                       'fb': prev_state['fb'],
@@ -53,9 +53,9 @@ class StateTransition:
                & (self._iy >= y_boundry[0][:, tf.newaxis, tf.newaxis]) & (self._iy <= y_boundry[1][:, tf.newaxis, tf.newaxis]))
         return tf.logical_or(new, seen)
 
-    def initial_state(self, batch_sz, initial_location):
+    def initial_state(self, batch_sz):
         return {'c': tf.fill([batch_sz, self._num_classes_kn], 1. / self._num_classes_kn),
-                'l': initial_location,
+                'l': None,
                 's': tf.layers.flatten(self._get_zero_cell_output(batch_sz)),  # output
                 's_state': self._cell.zero_state(batch_sz, dtype=tf.float32),  #
                 'fb': tf.zeros([batch_sz, self._num_classes_kn]),
@@ -80,7 +80,7 @@ class StateTransition:
     def _get_zero_cell_output(self, batch_sz):
         raise NotImplementedError("Abstract method")
 
-    def _get_cell_input(self, z, glimpse_idx, last_action, next_action):
+    def _get_cell_input(self, z, glimpse_idx, action):
         raise NotImplementedError("Abstract method")
 
 

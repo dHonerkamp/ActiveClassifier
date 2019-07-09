@@ -19,7 +19,7 @@ class REINFORCEPlanner(BasePlanner):
         self.lbls = labels
 
 
-    def planning_step(self, current_state, z_samples, glimpse_idx, time, is_training, rnd_loc_eval):
+    def planning_step(self, current_state, time, is_training, rnd_loc_eval):
         # TODO: CHECK EFFECT ON PERFORMANCE FROM INCLUDING THIS OR NOT (WHETHER INCLUDING IT MAKES THE MODEL FOCUS LESS ON LEARNING RECONSTRUCTIONS)
         if self._is_pre_phase and (self.rl_reward == 'clf'):
             # TODO: ADJUST FOR UK CLASSES
@@ -30,7 +30,7 @@ class REINFORCEPlanner(BasePlanner):
         else:
             inputs = [current_state['s'], current_state['c']]
         next_action, next_action_mean = self.m['policyNet'].next_actions(inputs=inputs, is_training=is_training, n_policies=self.n_policies)
-        next_exp_obs = self.single_policy_prediction(current_state, z_samples, next_action, glimpse_idx)
+        next_exp_obs = self.single_policy_prediction(current_state, next_action)
 
         if time < (self.num_glimpses - 1):
             decision = tf.fill([self.B], -1)

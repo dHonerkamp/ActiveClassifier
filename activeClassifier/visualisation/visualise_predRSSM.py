@@ -81,7 +81,7 @@ class Visualization_predRSSM(Visualiser):
                 axes[t+1, 0].imshow(gl[t, i], cmap='gray')
                 title = 'Label: {}, clf: {}'.format(self.lbl_map[d['y'][i]], self.lbl_map[d['clf'][i]])
                 if self.uk_label is not None:
-                    title += ', p(uk): {:.2f}'.format(d['uk_belief'][t, i])
+                    title += ', p(uk) post: {:.2f}'.format(d['uk_belief'][t + 1, i])
                 axes[t+1, 0].set_title(title)
                 # posterior
                 axes[t+1, 1].imshow(gl_post[t, i], cmap='gray')
@@ -134,14 +134,14 @@ class Visualization_predRSSM(Visualiser):
                 self._plot_seen(d['x'][i], d['locs'][:, i], until_t=min(t + 1, self.num_glimpses), ax=axes[t + 1, 0])
                 title = 'Label: {}, clf: {}'.format(self.lbl_map[d['y'][i]], self.lbl_map[d['clf'][i]])
                 if self.uk_label is not None:
-                    title += ', p(uk): {:.2f}'.format(d['uk_belief'][t, i])
+                    title += ', p(uk) post: {:.2f}'.format(d['uk_belief'][t + 1, i])
                 axes[t + 1, 0].set_title(title)
                 # posterior
                 self._glimpse_patches_until_t(t+1, gl[:, i], gl_post[:, i], d['locs'][:, i], axes[t + 1, 1])
                 axes[t + 1, 1].set_title('Posterior, nll: {:.2f}'.format(d['nll_posterior'][t, i]))
                 # prior for all classes
-                ranks_overall = np.argsort(-d['state_believes'][t, i, :])
-                ranks_kl = np.argsort(d['KLdivs'][t, i, :])
+                ranks_overall = np.argsort(-d['state_believes'][t, i, :]).tolist()
+                ranks_kl = np.argsort(d['KLdivs'][t, i, :]).tolist()
                 ps_kl = softmax(-d['KLdivs'][t, i, :])
                 for j, hyp in enumerate(ranked_hyp):
                     self._glimpse_patches_until_t(min(t + 1, self.num_glimpses), gl[:, i], gl_preds[:, i, hyp], d['locs'][:, i], axes[t + 1, j + 2])
@@ -150,7 +150,7 @@ class Visualization_predRSSM(Visualiser):
                     else:
                         c = get_title_color(d['state_believes'][min(t + 1, self.num_glimpses), i, :], hyp)
                         axes[t + 1, j + 2].set_title('{}: tot. rank pre: {}, kl rank: {}\nsftmx(KL): {:.2f}, KL: {:.2f}, post-c: {:.2f}'.format(
-                                                            self.lbl_map[hyp], ranks_overall[hyp], ranks_kl[hyp],
+                                                            self.lbl_map[hyp], ranks_overall.index(hyp), ranks_kl.index(hyp),
                                                             ps_kl[hyp], d['KLdivs'][t, i, hyp], d['state_believes'][t + 1, i, hyp]),
                                                      color=c)
 
@@ -213,7 +213,7 @@ class Visualization_predRSSM(Visualiser):
         glimpse_padded_seen = np.ma.masked_where(~seen, glimpse_padded)
         ax.imshow(glimpse_padded_seen, cmap='gray')
         half_pixel = 0.5 if (self.scale_sizes[0] % 2 == 0) else 0  # glimpses are rounded to pixel values do the same for the rectangle to make it fit nicely
-        ax.add_patch(Rectangle(np.round(locs[until_t - 1, ::-1] - half_width) - half_pixel, width=self.scale_sizes[0], height=self.scale_sizes[0], edgecolor='blue', facecolor='none'))
+        ax.add_patch(Rectangle(np.round(locs[until_t - 1, ::-1] - half_width) - half_pixel, width=self.scale_sizes[0], height=self.scale_sizes[0], edgecolor='green', facecolor='none'))
 
     # @visualisation_level(2)
     # def plot_planning(self, d, nr_examples, suffix='', folder_name='planning'):
@@ -325,7 +325,8 @@ class Visualization_predRSSM(Visualiser):
                 if decided:
                     axes[ax, i].set_title('t: {}, decision - no new glimpse'.format(t))
                 else:
-                    axes[ax, i].set_title('t: {}, selected policy: {}'.format(t, np.argmax(d['G'][t, i, :])))
+                    selected = [j for j, arr in enumerate(d['potential_actions'][t, i, :]) if (arr == d['locs'][t, i]).all()]
+                    axes[ax, i].set_title('t: {}, selected policy: {}'.format(t, selected[0]))
 
                     # plot rectangles for evaluated next locations
                     ranked_policies = np.argsort(- d['G'][t, i, :-1])

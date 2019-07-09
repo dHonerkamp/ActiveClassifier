@@ -98,7 +98,7 @@ class predRSSM(base.Base):
         out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='rewards'))
         out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='baselines'))
         out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses+1, dynamic_size=False, name='current_c'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='uk_belief'))
+        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses+1, dynamic_size=False, name='uk_belief'))
         out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='fb'))
         out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='bl_surprise'))
         out_ta.append(tf.TensorArray(tf.bool,    size=FLAGS.num_glimpses, dynamic_size=False, name='done'))
@@ -119,24 +119,20 @@ class predRSSM(base.Base):
         # Initial values
         last_done = tf.zeros([self.B], dtype=tf.bool)
         last_decision = tf.fill([self.B], -1)
-        if not FLAGS.rnd_first_glimpse:
-            last_state = stateTransition.initial_state(self.B, tf.zeros([self.B, policyNet.output_size]))
-            last_z = {'mu': tf.zeros([self.B] + VAEencoder.output_shape_flat), 'sample': tf.zeros([self.B] + VAEencoder.output_shape_flat)}
-            glimpse_idx = tf.zeros([self.B] + env.patch_shape[1:3] + [3], dtype=tf.int32)
+        last_state = stateTransition.initial_state(self.B)
+        ta_d['current_c'] = self._write_zero_out(0, ta_d['current_c'], last_state['c'], last_done, 'current_c')
+        ta_d['uk_belief'] = self._write_zero_out(0, ta_d['uk_belief'], last_state['uk_belief'], last_done, 'uk_belief')
 
         with tf.name_scope('Main_loop'):
             for time in range(FLAGS.num_glimpses):
                 if FLAGS.rnd_first_glimpse and (time == 0):
+                    # TODO: should I realy be making predictions for the first, random glimpse?
                     # Initial action (if model can plan first action, the optimal first location should be identical for all images)
-                    current_state, next_decision, next_action, next_action_mean, next_exp_obs, pl_records = planner.initial_planning()
-                    ta_d['current_c'] = self._write_zero_out(0, ta_d['current_c'], current_state['c'], last_done, 'current_c')
+                    next_decision, next_action, next_action_mean, next_exp_obs, pl_records = planner.initial_planning(last_state)
                 else:
-                    next_decision, next_action, next_action_mean, next_exp_obs, pl_records = planner.planning_step(last_state, last_z['mu'], glimpse_idx, time, self.is_training, self.rnd_loc_eval)
+                    next_decision, next_action, next_action_mean, next_exp_obs, pl_records = planner.planning_step(last_state, time, self.is_training, self.rnd_loc_eval)
 
-                    # TODO : Could REUSE FROM PLANNING STEP
-                    current_state = stateTransition([last_z['mu'], next_action, glimpse_idx], last_state)
-
-                bl_inputs = tf.concat([current_state['c'], current_state['s']], axis=1)
+                bl_inputs = tf.concat([last_state['c'], last_state['s']], axis=1)
                 baseline = fc_baseline(tf.stop_gradient(bl_inputs))
                 if FLAGS.rl_reward != 'G':
                     baseline = tf.squeeze(baseline, 1)
@@ -144,11 +140,14 @@ class predRSSM(base.Base):
                 observation, glimpse_idx, corr_classification_fb, done = env.step(next_action, next_decision)
                 newly_done = done
                 done = tf.logical_or(last_done, done)
-                current_state, z_post, nll_post, reconstr_posterior, KLdivs, belief_loss, bl_surprise = beliefUpdate.update(current_state, observation, next_exp_obs, time, newly_done)
+
+                current_state, z_post, nll_post, reconstr_posterior, KLdivs, belief_loss, bl_surprise = beliefUpdate.update(last_state, next_action, observation, next_exp_obs, time, newly_done)
+                current_state = stateTransition([z_post['mu'], next_action, glimpse_idx], current_state)
                 # t=0 to T-1
                 ta_d['obs']                      = self._write_zero_out(time, ta_d['obs'], observation, done, 'obs')
                 ta_d['KLdivs']                   = self._write_zero_out(time, ta_d['KLdivs'], KLdivs, done, 'KLdivs')  # [B, hyp]
                 ta_d['nll_posterior']            = self._write_zero_out(time, ta_d['nll_posterior'], nll_post, done, 'nll_posterior')  # [B, n_policies]
+                ta_d['z_post']                   = self._write_zero_out(time, ta_d['z_post'], z_post['sample'], done, 'z_post')
                 ta_d['reconstr_posterior']       = self._write_zero_out(time, ta_d['reconstr_posterior'], reconstr_posterior, done, 'reconstr_posterior')  # for visualisation only
                 ta_d['actions']                  = self._write_zero_out(time, ta_d['actions'], next_action, done, 'actions')  # location actions, not including the decision acions
                 ta_d['actions_mean']             = self._write_zero_out(time, ta_d['actions_mean'], next_action_mean, done, 'actions_mean')  # location actions, not including the decision acions
@@ -157,26 +156,23 @@ class predRSSM(base.Base):
                 ta_d['current_s']                = self._write_zero_out(time, ta_d['current_s'], current_state['s'], done, 'current_s')  # [B, rnn]
                 ta_d['fb']                       = self._write_zero_out(time, ta_d['fb'], current_state['fb'], done, 'fb')  # [B, num_classes]
                 ta_d['bl_surprise']              = self._write_zero_out(time, ta_d['bl_surprise'], bl_surprise, done, 'bl_surprise')  # [B]
+                ta_d['belief_loss']              = self._write_zero_out(time, ta_d['belief_loss'], belief_loss, done, 'belief_loss')
                 ta_d['done']                     = ta_d['done'].write(time, done)
-                # t=0/1 to T
-                ta_d['baselines']                = self._write_zero_out(time, ta_d['baselines'], baseline, last_done, 'baselines')  # this baseline is taken before the decision/observation! Same indexed rewards are taken after!
-                ta_d['rewards']                  = self._write_zero_out(time, ta_d['rewards'], corr_classification_fb, last_done, 'rewards')
-                ta_d['belief_loss']              = self._write_zero_out(time, ta_d['belief_loss'], belief_loss, last_done, 'belief_loss')
-                ta_d['z_post']                   = self._write_zero_out(time, ta_d['z_post'], z_post['sample'], last_done, 'z_post')
-                # t=0 to T
                 for k, v in pl_records.items():
                     if FLAGS.debug: print(time, k, v.shape)
                     ta_d[k] = self._write_zero_out(time, ta_d[k], v, done, k)
-                ta_d['current_c'] = self._write_zero_out(time + 1, ta_d['current_c'], current_state['c'], last_done, 'current_c')  # ONLY ONE t=0 TO T
-                ta_d['uk_belief'] = self._write_zero_out(time, ta_d['uk_belief'], current_state['uk_belief'], last_done, 'uk_belief')
+                # t=-1 to T-1 (from before first glimpse to after last glimpse, but not after decision)
+                ta_d['current_c'] = self._write_zero_out(time + 1, ta_d['current_c'], current_state['c'], done, 'current_c')
+                ta_d['uk_belief'] = self._write_zero_out(time + 1, ta_d['uk_belief'], current_state['uk_belief'], done, 'uk_belief')
+                # t=0 to T
+                ta_d['baselines']                = self._write_zero_out(time, ta_d['baselines'], baseline, last_done, 'baselines')  # this baseline is taken before the decision/observation! Same indexed rewards are taken after!
+                ta_d['rewards']                  = self._write_zero_out(time, ta_d['rewards'], corr_classification_fb, last_done, 'rewards')
                 # copy forward
                 classification_decision = tf.where(last_done, last_decision, next_decision)
                 last_decision = tf.where(last_done, last_decision, next_decision)
                 ta_d['decisions'] = ta_d['decisions'].write(time, next_decision)
                 # pass on to next time step
                 last_done = done
-                last_z = z_post
-                # last_c = current_c  # TODO: could also use the one from planning (new_c) or pi
                 last_state = current_state
 
                 # TODO: break loop if tf.reduce_all(last_done) (requires tf.while loop)
@@ -198,7 +194,7 @@ class predRSSM(base.Base):
             current_s = ta_d['current_s'].stack()  # [T,B,rnn]
             self.fb = ta_d['fb'].stack()  # [T,B,hyp]
             bl_surprise = ta_d['bl_surprise'].stack()  # [T,B]
-            self.uk_belief = ta_d['uk_belief'].stack()  # [T,B]
+            self.uk_belief = ta_d['uk_belief'].stack()  # [T+1,B]
             belief_loss = ta_d['belief_loss'].stack()  # [T,B]
 
             # further records for debugging

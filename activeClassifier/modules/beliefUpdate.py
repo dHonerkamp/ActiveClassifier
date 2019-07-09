@@ -24,7 +24,7 @@ class BeliefUpdate:
             khot_vector = tf.reduce_any(tf.cast(tf.one_hot(current_cycl_uk, depth=self.num_classes_kn), tf.bool), axis=0, keep_dims=True)
             self.current_cycl_uk_mask = tf.tile(khot_vector, [self.B, 1])  # [B, num_classes_kn]
 
-    def update(self, current_state, new_observation, exp_zs_prior, time, newly_done):
+    def update(self, current_state, next_action, new_observation, exp_zs_prior, time, newly_done):
         """Given a new observation, and the last believes over the state, update the believes over the states.
         The sufficient statistic of the old state in this case is z, as the VAEencoder is class-specific.
 
@@ -41,10 +41,10 @@ class BeliefUpdate:
             with tf.name_scope('poterior_inference/'):
                 # TODO: SHOULD POSTERIOR GET THE current_state['s']?
                 z_post = self.m['VAEEncoder'].calc_post(glimpse=new_observation,
-                                                        l=current_state['l'],
+                                                        l=next_action,
                                                         s=current_state['s'])
                 # COULD ALSO PASS current_state['s'], BUT THAT MEANS MODEL CAN USE THINGS THAT THE PRIOR DOES NOT PREDICT AND EASILY GET GOOD PREDICTIONS AND RECONSTRUCTIONS
-                reconstr_post = self.m['VAEDecoder'].decode([z_post['sample'], current_state['l']],
+                reconstr_post = self.m['VAEDecoder'].decode([z_post['sample'], next_action],
                                                             true_glimpse=new_observation)  # ^= filtering, given that transitions are deterministic
 
             # believes over the classes based on all past observations (uniformly weighted)
@@ -57,10 +57,10 @@ class BeliefUpdate:
             # aggregate feedback
             if self.normalise_fb == 1:
                 # predError = batch_min_normalization(KLdiv, epsilon=0.1) - 1.  # SUFFERS FROM ERRORS BEING MUCH LOWER IF LOOKING INTO THE CORNERS
-                bl_surprise = self._surprise_bl([current_state['l'], current_state['s']])
+                bl_surprise = self._surprise_bl([next_action, current_state['s']])
                 predError = tf.maximum(KLdiv / (tf.stop_gradient(bl_surprise) + 0.01), 1.) - 1.
             elif self.normalise_fb == 2:
-                bl_surprise = self._surprise_bl([current_state['l'], current_state['s']])
+                bl_surprise = self._surprise_bl([next_action, current_state['s']])
                 predError = tf.maximum(KLdiv - (tf.stop_gradient(bl_surprise)), 0.)
             else:
                 predError, bl_surprise = KLdiv, tf.zeros([self.B])

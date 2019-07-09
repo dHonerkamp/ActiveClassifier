@@ -153,7 +153,7 @@ class ActInfPlanner(BasePlanner):
                                                       name='rnd_loc_eval_cond')
         return next_actions, next_actions_mean
 
-    def planning_step(self, current_state, z_samples, glimpse_idx, time, is_training, rnd_loc_eval):
+    def planning_step(self, current_state, time, is_training, rnd_loc_eval):
         """Perform one planning step.
         Args:
             current state
@@ -184,15 +184,12 @@ class ActInfPlanner(BasePlanner):
             # select locations to evaluate
             next_actions, next_actions_mean = self._location_planning(inputs, is_training, rnd_loc_eval)
 
-            # action specific state transition
-            new_state = self.stateTransition([z_samples, next_actions, glimpse_idx], current_state)
-
             with tf.name_scope('Hypotheses_loop/'):  # for every action: loop over hypotheses
-                new_s_tiled = repeat_axis(new_state['s'], axis=0, repeats=self.n_policies * self.num_classes_kn)  # [B, rnn] -> [B * n_policies * hyp, rnn]
+                s_tiled = repeat_axis(current_state['s'], axis=0, repeats=self.n_policies * self.num_classes_kn)  # [B, rnn] -> [B * n_policies * hyp, rnn]
                 # TODO: THIS MIGHT HAVE TO CHANGE IF POLICIES DEPEND ON CLASS-CONDITIONAL Z
-                new_l_tiled = repeat_axis(tf.reshape(new_state['l'], [self.B * self.n_policies, self.loc_dim]),
+                next_actions_tiled = repeat_axis(tf.reshape(next_actions, [self.B * self.n_policies, self.loc_dim]),
                                           axis=0, repeats=self.num_classes_kn)  # [B, n_policies, loc] -> [B * n_policies, loc] -> [B * n_policies * hyp, loc]
-                exp_obs_prior_enc = self.m['VAEEncoder'].calc_prior([self.hyp, new_s_tiled, new_l_tiled],
+                exp_obs_prior_enc = self.m['VAEEncoder'].calc_prior([self.hyp, s_tiled, next_actions_tiled],
                                                                     out_shp=[self.B, self.n_policies, self.num_classes_kn])
 
                 if not self.use_pixel_obs_FE:
@@ -200,22 +197,22 @@ class ActInfPlanner(BasePlanner):
                     exp_obs_prior_sigma = exp_obs_prior_enc['sigma']
                     sample = exp_obs_prior_enc['sample']
                 else:
-                    exp_obs_prior = self.m['VAEDecoder'].decode([tf.reshape(exp_obs_prior_enc['sample'], [-1] + self.m['VAEEncoder'].output_shape_flat), new_l_tiled],
+                    exp_obs_prior = self.m['VAEDecoder'].decode([tf.reshape(exp_obs_prior_enc['sample'], [-1] + self.m['VAEEncoder'].output_shape_flat), next_actions_tiled],
                                                                 out_shp=[self.B, self.n_policies, self.num_classes_kn])
                     exp_obs_prior_logits = exp_obs_prior['mu_logits']
                     exp_obs_prior_sigma = exp_obs_prior['sigma']
                     sample = exp_obs_prior['sample']
 
-            G_obs, exp_exp_obs, exp_H, H_exp_exp_obs = self.calc_G_obs_prePreferences(exp_obs_prior_logits, exp_obs_prior_sigma, c_believes=new_state['c'])
+            G_obs, exp_exp_obs, exp_H, H_exp_exp_obs = self.calc_G_obs_prePreferences(exp_obs_prior_logits, exp_obs_prior_sigma, c_believes=current_state['c'])
             # For all non-decision actions the probability of classifying is 0, hence the probability of an observation is 1
             preference_error_obs = 1. * self.C[time, 0]
             G_obs += preference_error_obs
             # decision actions
-            G_dec = self._G_decision(time, new_state['c'])
+            G_dec = self._G_decision(time, current_state['c'])
             G = tf.concat([G_obs, G_dec[:, tf.newaxis]], axis=1)
 
             # action selection
-            decision, selected_action, selected_action_mean, selected_exp_obs_enc, selected_action_idx = self._action_selection(next_actions, next_actions_mean, new_state, G, exp_obs_prior_enc, time, is_training)
+            decision, selected_action, selected_action_mean, selected_exp_obs_enc, selected_action_idx = self._action_selection(next_actions, next_actions_mean, current_state, G, exp_obs_prior_enc, time, is_training)
 
             if self.rl_reward == 'G':
                 boosted_hyp = tf.reshape(boosted_hyp, [self.B, self.n_policies, self.num_classes_kn])

@@ -7,7 +7,7 @@ class PolicyNetwork:
     def __init__(self, FLAGS, batch_sz, name='LocationNetwork'):
         self.name = name
         self.max_loc_rng = FLAGS.max_loc_rng
-        self.init_loc_rng = FLAGS.init_loc_rng
+        self.rnd_loc_rng = min(FLAGS.rnd_loc_rng, FLAGS.max_loc_rng)
         self.B = batch_sz
         self.loc_dim = FLAGS.loc_dim
         self.img_shape =  FLAGS.img_shape
@@ -62,14 +62,13 @@ class PolicyNetwork:
 
         return loc_losses
 
-    def random_loc(self, rng=1., shp=None):
+    def random_loc(self, shp=None):
         with tf.name_scope(self.name):
-            rng = min(rng, self.max_loc_rng)
             if shp is None:
                 shp = [self.B, self.loc_dim]
             else:
                 shp = shp + [self.loc_dim]
-            loc = tf.random_uniform(shp, minval=rng * -1., maxval=rng * 1.)
+            loc = tf.random_uniform(shp, minval=self.rnd_loc_rng * -1., maxval=self.rnd_loc_rng * 1.)
         return loc, loc
 
     def uniform_loc_10(self, n_policies):
@@ -105,7 +104,7 @@ class PolicyNetwork:
         return seen_locs
 
     def inital_loc(self):
-        return self.random_loc(rng=self.init_loc_rng)
+        return self.random_loc()
 
     @property
     def output_size(self):

@@ -21,8 +21,8 @@ class BasePlanner:
         rnd_loc, rnd_loc = self.m['policyNet'].random_loc(rng)
         return tf.fill([self.B], -1), rnd_loc, rnd_loc, self.zero_records
 
-    def planning_step(self, current_state, z_samples, glimpse_idx, time, is_training, rnd_loc_eval):
-        return
+    def planning_step(self, current_state, time, is_training, rnd_loc_eval):
+        raise NotImplementedError("Abstract method")
 
     def _best_believe(self, state):
         best_belief = tf.argmax(state['c'], axis=1, output_type=tf.int32)
@@ -37,24 +37,20 @@ class BasePlanner:
         one_hot = tf.one_hot(tf.range(n_classes), depth=n_classes)  # [n_classes, n_classes]
         return tf.tile(one_hot, [n_tiles, 1])  # [B*n_tiles, n_classes]
 
-    def single_policy_prediction(self, state, z_samples=None, next_actions=None, glimpse_idx=None):
-        if z_samples is not None:
-            state = self.stateTransition([z_samples, next_actions, glimpse_idx], state)
-
+    def single_policy_prediction(self, state, next_action):
         hyp = self._hyp_tiling(n_classes=self.num_classes_kn, n_tiles=self.B * 1)  # [B * 1 * n_classes_kn, n_classes_kn]
-        new_s_tiled = repeat_axis(state['s'], axis=0, repeats=self.num_classes_kn)  # [B, rnn] -> [B * hyp, rnn]
-        new_l_tiled = repeat_axis(state['l'], axis=0, repeats=self.num_classes_kn)  # [B, loc] -> [B * hyp, loc]
+        s_tiled = repeat_axis(state['s'], axis=0, repeats=self.num_classes_kn)  # [B, rnn] -> [B * hyp, rnn]
+        next_action_tiled = repeat_axis(next_action, axis=0, repeats=self.num_classes_kn)  # [B, loc] -> [B * hyp, loc]
 
-        exp_obs_enc = self.m['VAEEncoder'].calc_prior([hyp, new_s_tiled, new_l_tiled], out_shp=[self.B, self.num_classes_kn])
+        exp_obs_enc = self.m['VAEEncoder'].calc_prior([hyp, s_tiled, next_action_tiled], out_shp=[self.B, self.num_classes_kn])
         return exp_obs_enc
 
-    def initial_planning(self):
+    def initial_planning(self, initial_state):
         selected_action, selected_action_mean = self.m['policyNet'].inital_loc()
-        new_state = self.stateTransition.initial_state(self.B, selected_action)
-        selected_exp_obs_enc = self.single_policy_prediction(new_state)  # [B, num_classes, m['VAEEncoder'].output_size]
+        selected_exp_obs_enc = self.single_policy_prediction(initial_state, selected_action)  # [B, num_classes, m['VAEEncoder'].output_size]
         decision = tf.fill([self.B], -1)
 
-        return new_state, decision, selected_action, selected_action_mean, selected_exp_obs_enc, self.zero_records
+        return decision, selected_action, selected_action_mean, selected_exp_obs_enc, self.zero_records
 
     @property
     def zero_records(self):

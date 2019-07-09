@@ -58,7 +58,7 @@ class Visualization_fullImgPred(Visualiser):
                 self._plot_seen(d['x'][i], d['locs'][:, i], until_t=t, ax=axes[t+1, 0])
                 title = 'Label: {}, clf: {}'.format(self.lbl_map[d['y'][i]], self.lbl_map[d['clf'][i]])
                 if self.uk_label is not None:
-                    title += ', p(uk): {:.2f}'.format(d['uk_belief'][t, i])
+                    title += ', p(uk) post: {:.2f}'.format(d['uk_belief'][t+1, i])
                 axes[t+1, 0].set_title(title)
                 # next location
                 decided = (d['decisions'][:t + 1, i] != -1).any()

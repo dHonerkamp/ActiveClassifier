@@ -10,7 +10,7 @@ class StAdditive(StateTransition):
         self._conv_shape_z = conv_shape_z
         self._cell = _rnn_cell_Additive(conv_shape_z)
 
-    def _get_cell_input(self, z, glimpse_idx, last_action, next_action):
+    def _get_cell_input(self, z, glimpse_idx, action):
         return tf.reshape(z, [self._B] + self._conv_shape_z)
 
     def _get_zero_cell_output(self, batch_sz):

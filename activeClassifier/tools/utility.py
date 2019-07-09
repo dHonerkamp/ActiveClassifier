@@ -63,7 +63,7 @@ class Utility(object):
         if not FLAGS.use_pixel_obs_FE:
             assert (FLAGS.pixel_obs_discrete == 0)
 
-        FLAGS.init_loc_rng = min(FLAGS.init_loc_rng, FLAGS.max_loc_rng)
+        FLAGS.rnd_loc_rng = min(FLAGS.rnd_loc_rng, FLAGS.max_loc_rng)
 
         # not including any potential unknown class (adjusted in get_data)
         FLAGS.num_classes_kn = FLAGS.num_classes
@@ -92,12 +92,12 @@ class Utility(object):
         experiment_name  = '{}gl_{}_{}_bs{}_MC{}_'.format(FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples)
         experiment_name += 'lr{}dc{}_'.format(FLAGS.learning_rate, FLAGS.learning_rate_decay_factor)
         experiment_name += '{}sc{}_glstd{}_{}_'.format(len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.gl_std, FLAGS.rnn_cell)
-        if (FLAGS.planner != 'ActInf') or (FLAGS.actInfPolicy == 'actInf'):
-            experiment_name += 'lstd{}to{}Rng{}_'.format(FLAGS.loc_std, FLAGS.loc_std_min, FLAGS.init_loc_rng)
+        if (FLAGS.planner == 'RL') or (FLAGS.actInfPolicy == 'actInf'):
+            experiment_name += 'lstd{}to{}Rng{}_'.format(FLAGS.loc_std, FLAGS.loc_std_min, FLAGS.max_loc_rng)
+        elif (FLAGS.planner == 'random') or (FLAGS.actInfPolicy == 'random'):
+            experiment_name += 'random{}_'.format(FLAGS.rnd_loc_rng)
         elif FLAGS.actInfPolicy == 'uniform_loc10':
             experiment_name += FLAGS.actInfPolicy + '_'
-        elif FLAGS.actInfPolicy == 'random':
-            experiment_name += FLAGS.actInfPolicy + '{}_'.format(FLAGS.init_loc_rng)
         experiment_name += 'preTr{}{}Uk{}_'.format(FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk) if FLAGS.pre_train_epochs else ''
         experiment_name += 'z{sz}{d}{kl}C{c}w{w}_fbN{n}_'.format(sz=FLAGS.size_z, d=FLAGS.z_dist, kl=FLAGS.z_B_kl, c=FLAGS.z_B_center, w=FLAGS.z_kl_weight, n=FLAGS.normalise_fb)
         experiment_name += '1stGlRnd' if FLAGS.rnd_first_glimpse else ''
@@ -163,10 +163,10 @@ class Utility(object):
         # locations
         parser.add_argument('--rnd_first_glimpse', type=int, default=1, choices=[0, 1], help='Whether to start with a random glimpse or plan it.')
         parser.add_argument('--actInfPolicy', type=str, default='actInf', choices=['random', 'uniform_loc10', 'actInf'], help='Policy for the actInfPlanner.')
-        parser.add_argument('--max_loc_rng', type=float, default=1., help='In what range are the locations allowed to fall? (Max. is -1 to 1)')
         parser.add_argument('--loc_std', type=float, default=0.09, help='Std used to sample locations. Relative to whole image being in range (-1, 1).')
         parser.add_argument('--loc_std_min', type=float, default=0.09, help='Minimum loc_std, decaying exponentially (hardcoded decay rate).')
-        parser.add_argument('--init_loc_rng', type=float, default=1., help='Range from which the initial, random location will be sampled. Value between [0, 1].')
+        parser.add_argument('--rnd_loc_rng', type=float, default=1., help='Range from which the random locations will be sampled. Value between [0, 1].')
+        parser.add_argument('--max_loc_rng', type=float, default=1., help='In what range any locations are allowed to fall, including learned and random. Value between [0, 1].')
         # parser.add_argument('--loc_encoding', type=str, default='cartFiLM', choices=["cartOrig", "cartFiLM", "cartRel", "polarRel"],
         #     help='cartOrig: (x, y), glNet: additive'
         #          'cartFiLM: (x, y), glNet: learning gamma, beta'

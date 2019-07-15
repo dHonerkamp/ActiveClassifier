@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 from activeClassifier.tools.tf_tools import TINY
 
 
-class Base:
+class BaseModel:
     def __init__(self, FLAGS, env, phase, name):
         self.name = name
         self.global_step = tf.train.create_global_step()

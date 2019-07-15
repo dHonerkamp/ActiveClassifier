@@ -78,19 +78,19 @@ class Visualization_predRSSM(Visualiser):
 
             for t in range(self.num_glimpses):
                 # true glimpse
-                axes[t+1, 0].imshow(gl[t, i], cmap='gray')
+                axes[t+1, 0].imshow(gl[t, i], **self.im_show_kwargs)
                 title = 'Label: {}, clf: {}'.format(self.lbl_map[d['y'][i]], self.lbl_map[d['clf'][i]])
                 if self.uk_label is not None:
                     title += ', p(uk) post: {:.2f}'.format(d['uk_belief'][t + 1, i])
                 axes[t+1, 0].set_title(title)
                 # posterior
-                axes[t+1, 1].imshow(gl_post[t, i], cmap='gray')
+                axes[t+1, 1].imshow(gl_post[t, i], **self.im_show_kwargs)
                 axes[t+1, 1].set_title('Posterior, nll: {:.2f}'.format(d['nll_posterior'][t, i]))
                 # prior for all classes
                 ranked_losses = np.argsort(d['KLdivs'][t, i, :])
                 ps = softmax(-d['KLdivs'][t, i, :])
                 for j, hyp in enumerate(ranked_losses):
-                    axes[t+1, j+2].imshow(gl_preds[t, i, hyp], cmap='gray')
+                    axes[t+1, j+2].imshow(gl_preds[t, i, hyp], **self.im_show_kwargs)
                     if d['decisions'][t, i] != -1:
                         axes[t+1, j + 2].set_title('Decision: {}'.format(d['decisions'][t, i]))
                     else:
@@ -210,8 +210,8 @@ class Visualization_predRSSM(Visualiser):
             new_glimpse_padded = self._stick_glimpse_onto_canvas(input[t], locs[t])
             glimpse_padded = np.where(new, new_glimpse_padded, glimpse_padded)
 
-        glimpse_padded_seen = np.ma.masked_where(~seen, glimpse_padded)
-        ax.imshow(glimpse_padded_seen, cmap='gray')
+        glimpse_padded_seen = self._mask_unseen(glimpse_padded, seen)
+        ax.imshow(glimpse_padded_seen, **self.im_show_kwargs)
         half_pixel = 0.5 if (self.scale_sizes[0] % 2 == 0) else 0  # glimpses are rounded to pixel values do the same for the rectangle to make it fit nicely
         ax.add_patch(Rectangle(np.round(locs[until_t - 1, ::-1] - half_width) - half_pixel, width=self.scale_sizes[0], height=self.scale_sizes[0], edgecolor='green', facecolor='none'))
 
@@ -236,14 +236,14 @@ class Visualization_predRSSM(Visualiser):
     #                 locs = d['potential_actions'][t, i, k]
     #                 color = 'green' if (locs == d['locs'][t, i, :]).all() else 'cyan'
     #
-    #                 axes[t, k].imshow(d['x'][i].reshape(self.img_shape_squeezed), cmap='gray')
+    #                 axes[t, k].imshow(d['x'][i].reshape(self.img_shape_squeezed), **self.im_show_kwargs)
     #                 axes[t, k].scatter(locs[1], locs[0], marker='x', facecolors=color, linewidth=2.5, s=0.25 * (5 * 8 * 24))
     #                 axes[t, k].add_patch(Rectangle(locs[::-1] - self.scale_sizes[0] / 2, width=self.scale_sizes[0], height=self.scale_sizes[0], edgecolor=color, facecolor='none', linewidth=2.5))
     #                 axes[t, k].set_title('G: {:.2f}, H_: {:.2f}, exp_H: {:.2f}, G_dec: {:.2f}'.format(d['G'][t, i, k], d['H_exp_exp_obs'][t, i, k], d['exp_H'][t, i, k], d['G'][t, i, -1]))
     #
     #                 # ranked_hyp = np.argsort(d['state_believes'][t, i, :])
     #                 # for j, hyp in enumerate(ranked_hyp[::-1]):
-    #                 #     # axes[t, j + 2].imshow(exp_obs[t, i, k, hyp], cmap='gray')
+    #                 #     # axes[t, j + 2].imshow(exp_obs[t, i, k, hyp], **self.im_show_kwargs)
     #                 #     axes[t, j + 2].set_title('Hyp: {}, prob: {:.2f}'.format(hyp, d['state_believes'][t, i, hyp]))
     #
     #         [ax.set_axis_off() for ax in axes.ravel()]
@@ -267,7 +267,7 @@ class Visualization_predRSSM(Visualiser):
                         axes[t, i].set_title('t: {}, decision - no glimpse'.format(t))
                         break
 
-                    axes[t, i].imshow(d['x'][i].reshape(self.img_shape_squeezed), cmap='gray')
+                    axes[t, i].imshow(d['x'][i].reshape(self.img_shape_squeezed), **self.im_show_kwargs)
                     axes[t, i].set_title('t: {}, selected policy: {}'.format(t, np.argmax(d['G'][t, i, :])))
                     for k in range(self.num_policies):
                         # potential location under evaluation
@@ -393,19 +393,19 @@ class Visualization_predRSSM(Visualiser):
                 if t == 0:
                     self._plot_img_plus_locs(axes[t, 0], d['x'][i], d['y'][i], d['clf'][i], d['locs'][:, i, :], d['decisions'][:, i])
                 else:
-                    axes[t, 0].imshow(gl[t, i], cmap='gray')
+                    axes[t, 0].imshow(gl[t, i], **self.im_show_kwargs)
                     axes[t, 0].set_title('t: {}'.format(t))
 
-                    axes[t, 1].imshow(posterior[t, i], cmap='gray')
+                    axes[t, 1].imshow(posterior[t, i], **self.im_show_kwargs)
                     axes[t, 1].set_title('posterior')
 
                     p = d['selected_action_idx'][t, i]
-                    axes[t, 2].imshow(exp_exp_obs[t, i, p], cmap='gray')
+                    axes[t, 2].imshow(exp_exp_obs[t, i, p], **self.im_show_kwargs)
                     axes[t, 2].set_title('H(exp) policy0: {:.2f}'.format(d['H_exp_exp_obs'][t, i, p]))
 
                     ranked_believes = np.argsort(- d['state_believes'][t, i, :])
                     for k in ranked_believes:
-                        axes[t, 3 + k].imshow(exp_obs_prior[t, i, k], cmap='gray')
+                        axes[t, 3 + k].imshow(exp_obs_prior[t, i, k], **self.im_show_kwargs)
                         axes[t, 3 + k].set_title('k: {}, p: {:.2f}'.format(k, d['state_believes'][t, i, k]))
 
             [ax.set_axis_off() for ax in axes.ravel()]

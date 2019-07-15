@@ -4,7 +4,7 @@ import tensorflow as tf
 import logging
 logger = logging.getLogger(__name__)
 
-from activeClassifier.models import base
+from activeClassifier.models import baseModel
 from activeClassifier.modules.policyNetwork import PolicyNetwork
 from activeClassifier.modules.VAE.encoder import Encoder, EncoderConv
 from activeClassifier.modules.VAE.decoder import Decoder
@@ -15,7 +15,7 @@ from activeClassifier.modules.stateTransition import StConvLSTM, StGRU, StAdditi
 from activeClassifier.modules.beliefUpdate import PredErrorUpdate, FullyConnectedUpdate, RAMUpdate
 
 
-class predRSSM(base.Base):
+class predRSSM(baseModel.BaseModel):
     def __init__(self, FLAGS, env, phase):
         super().__init__(FLAGS, env, phase, name='predRSSM')
 

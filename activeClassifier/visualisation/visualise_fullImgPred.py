@@ -65,7 +65,7 @@ class Visualization_fullImgPred(Visualiser):
                 ranked_losses = np.argsort(d['KLdivs'][t, i, :])
                 ps = softmax(-d['KLdivs'][t, i, :])
                 for j, hyp in enumerate(ranked_losses):
-                    axes[t+1, j + 1].imshow(reconstr[t, i, hyp], cmap='gray')
+                    axes[t+1, j + 1].imshow(reconstr[t, i, hyp], **self.im_show_kwargs)
                     if d['decisions'][t, i] != -1:
                         axes[t+1, j + 1].set_title('Decision: {}'.format(d['decisions'][t, i]))
                     else:

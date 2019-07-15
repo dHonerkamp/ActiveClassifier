@@ -4,7 +4,7 @@ import tensorflow as tf
 import logging
 logger = logging.getLogger(__name__)
 
-from activeClassifier.models import base
+from activeClassifier.models import baseModel
 from activeClassifier.modules.policyNetwork import PolicyNetwork
 from activeClassifier.modules_fullImg.generator import Generator
 from activeClassifier.modules_fullImg.representation import Representation
@@ -12,7 +12,7 @@ from activeClassifier.modules_fullImg.planner import ActInfPlanner_fullImg, Rand
 from activeClassifier.modules_fullImg.stateTransition import StateTransitionAdditive
 
 
-class fullImgPred(base.Base):
+class fullImgPred(baseModel.BaseModel):
     def __init__(self, FLAGS, env, phase):
         super().__init__(FLAGS, env, phase, name='fullImgPred')
         min_glimpses = 3

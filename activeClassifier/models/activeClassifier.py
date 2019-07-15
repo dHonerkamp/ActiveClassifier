@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow import distributions as tfd
 
-from activeClassifier.models import base
+from activeClassifier.models import baseModel
 from activeClassifier.tools.tf_tools import write_zero_out, repeat_axis, calculate_gaussian_nll
 from activeClassifier.modules.policyNetwork import PolicyNetwork
 from activeClassifier.modules.VAE.VAE_OLD import Encoder, Decoder, GlimpseEncoder
@@ -9,7 +9,7 @@ from activeClassifier.modules.planner import ActInfPlanner, REINFORCEPlanner
 from activeClassifier.modules.stateTransition import StateTransition_AC
 
 
-class ActiveClassifier(base.Base):
+class ActiveClassifier(baseModel.BaseModel):
     def __init__(self, FLAGS, env, phase):
         super().__init__(FLAGS, env, phase)
         min_glimpses = 3

@@ -89,15 +89,16 @@ class Utility(object):
 
     @staticmethod
     def set_exp_name(FLAGS):
-        experiment_name  = '{}gl_{}_{}_bs{}_MC{}_'.format(FLAGS.num_glimpses, FLAGS.planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples)
+        if (FLAGS.planner == 'RL') or (FLAGS.actInfPolicy == 'actInf'):
+            planner = '{}_lstd{}to{}Rng{}'.format(FLAGS.planner, FLAGS.loc_std, FLAGS.loc_std_min, FLAGS.max_loc_rng)
+        elif (FLAGS.planner == 'random') or (FLAGS.actInfPolicy == 'random'):
+            planner = '{}{}'.format(FLAGS.planner, FLAGS.rnd_loc_rng)
+        else:
+            planner = FLAGS.planner
+
+        experiment_name  = '{}gl_{}_{}_bs{}_MC{}_'.format(FLAGS.num_glimpses, planner, FLAGS.beliefUpdate, FLAGS.batch_size, FLAGS.MC_samples)
         experiment_name += 'lr{}dc{}_'.format(FLAGS.learning_rate, FLAGS.learning_rate_decay_factor)
         experiment_name += '{}sc{}_glstd{}_{}_'.format(len(FLAGS.scale_sizes), FLAGS.scale_sizes[0], FLAGS.gl_std, FLAGS.rnn_cell)
-        if (FLAGS.planner == 'RL') or (FLAGS.actInfPolicy == 'actInf'):
-            experiment_name += 'lstd{}to{}Rng{}_'.format(FLAGS.loc_std, FLAGS.loc_std_min, FLAGS.max_loc_rng)
-        elif (FLAGS.planner == 'random') or (FLAGS.actInfPolicy == 'random'):
-            experiment_name += 'random{}_'.format(FLAGS.rnd_loc_rng)
-        elif FLAGS.actInfPolicy == 'uniformLoc10':
-            experiment_name += FLAGS.actInfPolicy + '_'
         experiment_name += 'preTr{}{}Uk{}_'.format(FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk) if FLAGS.pre_train_epochs else ''
         experiment_name += 'z{sz}{d}{kl}C{c}w{w}_fbN{n}_'.format(sz=FLAGS.size_z, d=FLAGS.z_dist, kl=FLAGS.z_B_kl, c=FLAGS.z_B_center, w=FLAGS.z_kl_weight, n=FLAGS.normalise_fb)
         experiment_name += '1stGlRnd' if FLAGS.rnd_first_glimpse else ''
@@ -109,11 +110,15 @@ class Utility(object):
         if FLAGS.binarize_MNIST:
             experiment_name += '_binar'
 
-        if platform != 'win32':
-            if FLAGS.freeze_enc:
-                experiment_name += '_frzEnc'
-            if FLAGS.freeze_policyNet:
-                experiment_name += '_frzPol'
+        # model specific naming
+        if FLAGS.model == 'predRSMM':
+            if platform != 'win32':
+                if FLAGS.freeze_enc:
+                    experiment_name += '_frzEnc'
+                if FLAGS.freeze_policyNet:
+                    experiment_name += '_frzPol'
+        elif FLAGS.model == 'inpaint':
+            experiment_name += '_consLoss{}'.format(FLAGS.inclConsistencyLoss)
 
         name = os.path.join(FLAGS.exp_folder, experiment_name)
 

@@ -46,6 +46,8 @@ class Visualiser:
         self.uk_label = FLAGS.uk_label
         self.lbl_map = FLAGS.class_remapping
 
+        self.im_show_kwargs = {'vmin': 0, 'vmax': 1, 'cmap': 'gray'}
+
     def visualise(self, d, suffix=None, nr_obs_overview=8, nr_obs_reconstr=5):
         nr_obs_overview = min(nr_obs_overview, self.batch_size_eff)  # batch_size_eff is set in _eval_feed() -> has to come before
 
@@ -131,7 +133,7 @@ class Visualiser:
         self._save_fig(f, 'glimpses', '{}{}.png'.format(self.prefix, suffix))
 
     def _plot_img_plus_locs(self, ax, x, y, clf, locs, decisions, rectangle=False):
-        ax.imshow(x.reshape(self.img_shape_squeezed), cmap='gray')
+        ax.imshow(x.reshape(self.img_shape_squeezed), **self.im_show_kwargs)
         ax.set_title('Label: {} Classification: {}'.format(self.lbl_map[y], self.lbl_map[clf]))
 
         for t in range(self.num_glimpses):
@@ -155,7 +157,7 @@ class Visualiser:
         ax.set_xlim([0, self.img_shape[1] - 1])
 
     def _plot_composed_glimpse(self, ax, gl_composed, belief, decision):
-        ax.imshow(gl_composed.reshape(2 * [np.max(self.scale_sizes)] + [self.img_shape[-1]]).squeeze(), cmap='gray')
+        ax.imshow(gl_composed.reshape(2 * [np.max(self.scale_sizes)] + [self.img_shape[-1]]).squeeze(), **self.im_show_kwargs)
         top_belief = np.argmax(belief)
         ax.set_title('class {}, belief: {}, prob: {:.3f}'.format(decision, top_belief, belief[top_belief]))
 
@@ -182,10 +184,8 @@ class Visualiser:
             new = (ix >= x_boundry[0]) & (ix <= x_boundry[1]) & (iy >= y_boundry[0]) & (iy <= y_boundry[1])
             seen[new] = True
 
-        cmap = matplotlib.cm.gray
-        cmap.set_bad(color='white')
-        img_seen = np.ma.masked_where(~seen, img)
-        ax.imshow(img_seen, cmap=cmap)
+        img_unseen = self._mask_unseen(img, seen)
+        ax.imshow(img_unseen, **self.im_show_kwargs)
 
     def _save_fig(self, f, folder_name, name):
         path = os.path.join(self.path, folder_name)
@@ -197,3 +197,9 @@ class Visualiser:
         f.savefig(os.path.join(path, name), bbox_inches='tight')
         plt.close(f)
         logger.debug('Saved fig {}'.format(os.path.join(folder_name, name)))
+
+    def _mask_unseen(self, img, seen):
+        if self.img_shape[-1] == 1:
+            return np.where(~seen, 0.5, img)
+        else:
+            return np.ma.masked_where(~seen, img)

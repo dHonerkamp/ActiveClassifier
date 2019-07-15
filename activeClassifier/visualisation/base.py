@@ -77,26 +77,29 @@ class Visualiser:
             idx_examples += list(idx_uk[:nr_uk])
         return idx_examples
 
+    def _eval_fetch(self, model):
+        return {'step'               : model.global_step,
+                'epoch'              : model.epoch_num,
+                'phase'              : model.phase,
+                'x'                  : model.x_MC,
+                'y'                  : model.y_MC,
+                'locs'               : model.actions,
+                'gl_composed'        : model.glimpses_composed,
+                'clf'                : model.classification,
+                'decisions'          : model.decisions,
+                'state_believes'     : model.state_believes,
+                'G'                  : model.G,
+                'glimpse'            : model.obs,
+                'KLdivs'             : model.KLdivs,
+                'fb'                 : model.fb,
+                'uk_belief'          : model.uk_belief,
+                'H_exp_exp_obs'      : model.H_exp_exp_obs,
+                'exp_H'              : model.exp_H,
+                'exp_exp_obs'        : model.exp_exp_obs,
+                }
+
     def eval_feed(self, sess, feed, model):
-        fetch = {'step'               : model.global_step,
-                 'epoch'              : model.epoch_num,
-                 'phase'              : model.phase,
-                 'x'                  : model.x_MC,
-                 'y'                  : model.y_MC,
-                 'locs'               : model.actions,
-                 'gl_composed'        : model.glimpses_composed,
-                 'clf'                : model.classification,
-                 'decisions'          : model.decisions,
-                 'state_believes'     : model.state_believes,
-                 'G'                  : model.G,
-                 'glimpse'            : model.obs,
-                 'KLdivs'             : model.KLdivs,
-                 'fb'                 : model.fb,
-                 'uk_belief'          : model.uk_belief,
-                 'H_exp_exp_obs'      : model.H_exp_exp_obs,
-                 'exp_H'              : model.exp_H,
-                 'exp_exp_obs'        : model.exp_exp_obs,
-                 }
+        fetch = self._eval_fetch(model)
         fetch.update(model.get_visualisation_fetch())
 
         d = sess.run(fetch, feed_dict=feed)
@@ -117,16 +120,14 @@ class Visualiser:
     @visualisation_level(1)
     def plot_overview(self, d, nr_examples, suffix=''):
         f, axes = plt.subplots(nr_examples, self.num_glimpses + 1, figsize=(6 * self.num_glimpses, 5 * nr_examples))
-        axes    = axes.reshape([nr_examples, self.num_glimpses + 1])
 
-        nr_examples = min(self.batch_size_eff, nr_examples)  # might have less examples if at the end of a batch
         idx_examples = self._get_idx_examples(d['y'], nr_examples, nr_uk=4, replace=True)
         for a, i in enumerate(idx_examples):
             self._plot_img_plus_locs(axes[a, 0], d['x'][i], d['y'][i], d['clf'][i], d['locs'][:, i, :], d['decisions'][:, i])
             for t in range(self.num_glimpses):
                 self._plot_composed_glimpse(axes[a, t + 1], d['gl_composed'][t, i], d['state_believes'][t, i], d['decisions'][t, i])
 
-        plt.setp(axes, xticks=[], yticks=[])
+        [ax.set_axis_off() for ax in axes.ravel()]
         self._save_fig(f, 'glimpses', '{}{}.png'.format(self.prefix, suffix))
 
     def _plot_img_plus_locs(self, ax, x, y, clf, locs, decisions, rectangle=False):

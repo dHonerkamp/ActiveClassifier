@@ -92,13 +92,16 @@ class ImageForagingEnvironment:
             else:
                 next_glimpse = self._multi_scale_glimpse(glimpse)
 
-            corr_classification = tf.cast(tf.equal(decision, self.y_MC), tf.float32)
-            # non-classification action is encoded as -1
-            done = tf.not_equal(decision, -1)
-
+            corr_classification, done = self._process_decision(decision)
             next_glimpse = tf.where(done, tf.zeros_like(next_glimpse), next_glimpse)
 
             return next_glimpse, glimpse_idx, corr_classification, done
+
+    def _process_decision(self, decision):
+        corr_classification = tf.cast(tf.equal(decision, self.y_MC), tf.float32)
+        # non-classification action is encoded as -1
+        done = tf.not_equal(decision, -1)
+        return corr_classification, done
 
     def _multi_scale_glimpse(self, glimpse):
         # tf.while should allow to process scales in parallel. Small improvement

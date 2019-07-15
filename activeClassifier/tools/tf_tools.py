@@ -6,13 +6,12 @@ from tensorflow.contrib.distributions import Logistic
 TINY = 1e-8
 
 
-def output_into_gaussian_params(output, min_std=None):
-    mu, sigma = tf.split(output, 2, axis=1)
-    sigma = tf.nn.softplus(sigma) + TINY
-    if min_std:
-        sigma = tf.maximum(sigma, min_std)
+def output_into_gaussian_params(output, min_std=TINY, axis=-1):
+    mu, sigma = tf.split(output, 2, axis=axis)
+    sigma = tf.nn.softplus(sigma)
+    sigma = tf.maximum(sigma, min_std)
 
-    return tf.distributions.Normal(mu, sigma), mu, sigma
+    return tf.distributions.Normal(mu, sigma)
 
 
 def create_MLP(specs, name_prefix=''):

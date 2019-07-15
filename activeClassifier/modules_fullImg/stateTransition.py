@@ -53,7 +53,7 @@ class StateTransitionAdditive:
         # TODO: could be done more efficiently
         updated_seen = self._update_seen(prev_state['seen'], location)
 
-        next_state = {'c'        : prev_state['c'],
+        next_state = {'c'        : c,
                       's'        : next_s_output,
                       's_state'  : next_s_state,
                       'fb'       : fb,

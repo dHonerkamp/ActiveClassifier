@@ -40,10 +40,6 @@ class Visualization_fullImgPred(Visualiser):
 
         nax = 1 + self.num_classes_kn
 
-        # gl = self._glimpse_reshp(d['glimpse'])  # [T, B, scale[0], scales*scale[0]]
-        # gl_post = self._glimpse_reshp(d['reconstr_posterior'])  # [T, B, scale[0], scales*scale[0]]
-        # gl_preds = self._glimpse_reshp(d['reconstr_prior'])  # [T, B, hyp, scale[0], scales*scale[0]]
-
         reconstr = np.squeeze(d['reconstr'], -1)
 
         idx_examples = self._get_idx_examples(d['y'], nr_examples, replace=False)

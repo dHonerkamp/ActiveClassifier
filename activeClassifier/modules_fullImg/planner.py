@@ -22,7 +22,6 @@ class Base:
     def planning_step(self, current_state, obs_prior, time):
         raise NotImplementedError("Abstract method")
 
-
     def _best_believe(self, state):
         best_belief = tf.argmax(state['c'], axis=1, output_type=tf.int32)
         # TODO: IF THRESHOLD FOR UK CLASSIFICATION IS NOT LEARNED (EG. JUST WORSE THAN THE 99TH PERCENTILE OF THE PAST OR SMTH), THEN WE COULD ALSO OUTPUT UNKNOWN
@@ -129,10 +128,10 @@ class RandomLocPlanner(Base):
         super().__init__(FLAGS, batch_sz)
 
         self.loc_dim = FLAGS.loc_dim
-        self.max_loc_rng = FLAGS.max_loc_rng
+        self.rnd_loc_rng = FLAGS.rnd_loc_rng
 
     def planning_step(self, current_state, obs_prior, time):
-        next_loc = tf.random_uniform([self.B, self.loc_dim], minval=self.max_loc_rng * -1., maxval=self.max_loc_rng * 1.)
+        next_loc = tf.random_uniform([self.B, self.loc_dim], minval=self.rnd_loc_rng * -1., maxval=self.rnd_loc_rng * 1.)
 
         best_belief = self._best_believe(current_state)
 

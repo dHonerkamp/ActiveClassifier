@@ -56,7 +56,7 @@ class Utility(object):
         if FLAGS.planner != 'ActInf':
             FLAGS.actInfPolicy = None
 
-        if FLAGS.actInfPolicy == 'uniform_loc10':
+        if FLAGS.actInfPolicy == 'uniformLoc10':
             assert FLAGS.rl_reward in ['clf', 'G']
             assert ~FLAGS.rnd_first_glimpse  # not completely necessary, but seems to make sense
 
@@ -96,7 +96,7 @@ class Utility(object):
             experiment_name += 'lstd{}to{}Rng{}_'.format(FLAGS.loc_std, FLAGS.loc_std_min, FLAGS.max_loc_rng)
         elif (FLAGS.planner == 'random') or (FLAGS.actInfPolicy == 'random'):
             experiment_name += 'random{}_'.format(FLAGS.rnd_loc_rng)
-        elif FLAGS.actInfPolicy == 'uniform_loc10':
+        elif FLAGS.actInfPolicy == 'uniformLoc10':
             experiment_name += FLAGS.actInfPolicy + '_'
         experiment_name += 'preTr{}{}Uk{}_'.format(FLAGS.pre_train_epochs, FLAGS.pre_train_policy, FLAGS.pre_train_uk) if FLAGS.pre_train_epochs else ''
         experiment_name += 'z{sz}{d}{kl}C{c}w{w}_fbN{n}_'.format(sz=FLAGS.size_z, d=FLAGS.z_dist, kl=FLAGS.z_B_kl, c=FLAGS.z_B_center, w=FLAGS.z_kl_weight, n=FLAGS.normalise_fb)
@@ -160,7 +160,7 @@ class Utility(object):
         parser.add_argument('--freeze_policyNet', type=int, default=None, help='Number of epochs after which to freeze the policyNet weights. Set to None to ignore.')
         # locations
         parser.add_argument('--rnd_first_glimpse', type=int, default=1, choices=[0, 1], help='Whether to start with a random glimpse or plan it.')
-        parser.add_argument('--actInfPolicy', type=str, default='actInf', choices=['random', 'uniform_loc10', 'actInf'], help='Policy for the actInfPlanner.')
+        parser.add_argument('--actInfPolicy', type=str, default='actInf', choices=['random', 'uniformLoc10', 'actInf'], help='Policy for the actInfPlanner.')
         parser.add_argument('--loc_std', type=float, default=0.09, help='Std used to sample locations. Relative to whole image being in range (-1, 1).')
         parser.add_argument('--loc_std_min', type=float, default=0.09, help='Minimum loc_std, decaying exponentially (hardcoded decay rate).')
         parser.add_argument('--rnd_loc_rng', type=float, default=1., help='Range from which the random locations will be sampled. Value between [0, 1].')
@@ -171,7 +171,7 @@ class Utility(object):
         #          'cartRel: diff(x,y) '
         #          'polarRel: r, theta')
         # more important settings
-        parser.add_argument('-p', '--planner', type=str, default='ActInf', choices=['ActInf', 'RL', 'random'], help='Planning strategy.')
+        parser.add_argument('-p', '--planner', type=str, default='ActInf', choices=['ActInf', 'RL', 'random', 'uniformLoc10'], help='Planning strategy.')
         parser.add_argument('--rl_reward', type=str, default='clf', choices=['clf', 'G1', 'G'], help='Rewards for ActInf location policy. For other planners always clf.')
         parser.add_argument('-bu', '--beliefUpdate', type=str, default='fb', choices=['fb', 'fc', 'RAM'], help='Belief update strategy.')
         parser.add_argument('--normalise_fb', type=int, default=0, choices=[0, 1, 2], help='Use min_normalisation for prediction fb or not. 1: divide by baseline, 1: subtract baseline')
@@ -220,12 +220,16 @@ class Utility(object):
         # parser.add_argument('--punish_uk_wrong', type=float, default=0, help='If not 0: Reward of its value for not classifying an unknown as unknown.')
 
         # model selection
-        parser.add_argument('-m', '--model', type=str, default='predRSSM', choices=['predRSSM', 'fullImgPred'], help='Flattened size of r. Default MNIST: [7, 7, 21] = 1029')
+        parser.add_argument('-m', '--model', type=str, default='predRSSM', choices=['predRSSM', 'fullImgPred', 'inpaint'], help='Flattened size of r. Default MNIST: [7, 7, 21] = 1029')
+
         # fullImgPred
         parser.add_argument('--size_r', type=int, default=1029, help='Flattened size of r. Default MNIST: [7, 7, 21] = 1029')
         parser.add_argument('--convLSTM_L', type=int, default=3, help='Number of generative layers through the convLSTM (GQN: 12)')
         parser.add_argument('--convLSTM_filters', type=int, default=24, help='Number of filters in the convLSTM')
         parser.add_argument('--z_filters', type=int, default=5, help='Number of filters for z')
+
+        # inpaint
+        parser.add_argument('--inclConsistencyLoss', type=int, choices=[0, 1], default=1, help='Whether to require to reconstruct seen, plausible pixel')
 
 
         FLAGS, unparsed = parser.parse_known_args()
@@ -293,9 +297,7 @@ class Utility(object):
 
         folder = '{d}{tsz}{resz}{uk}'.format(d=FLAGS.dataset, tsz=FLAGS.translated_size or '', resz=FLAGS.img_resize or '',
                                              uk = '_UK' if FLAGS.num_uk_test or FLAGS.uk_test_labels else '')
-        model_folder = FLAGS.model if FLAGS.model != 'predRSMM' else ''
-
-        FLAGS.path = os.path.join(FLAGS.summaries_dir, folder, model_folder, FLAGS.experiment_name)
+        FLAGS.path = os.path.join(FLAGS.summaries_dir, folder, FLAGS.model, FLAGS.experiment_name)
         os.makedirs(FLAGS.path, exist_ok=True)
 
         logger = Utility.configure_logging(__name__, FLAGS.path, FLAGS.debug)

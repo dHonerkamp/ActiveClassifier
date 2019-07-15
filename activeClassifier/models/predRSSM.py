@@ -83,45 +83,42 @@ class predRSSM(base.Base):
         else:
             raise ValueError('Undefined beliefUpdate.')
 
-        # variables to remember. Probably to be implemented via TensorArray
-        out_ta = []
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='obs'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='nll_posterior'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='reconstr_posterior'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='KLdivs'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='G'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='actions'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='actions_mean'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='selected_exp_obs_enc'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='current_s'))
-        out_ta.append(tf.TensorArray(tf.int32,   size=FLAGS.num_glimpses, dynamic_size=False, name='decisions'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='rewards'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='baselines'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses+1, dynamic_size=False, name='current_c'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses+1, dynamic_size=False, name='uk_belief'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='fb'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='bl_surprise'))
-        out_ta.append(tf.TensorArray(tf.bool,    size=FLAGS.num_glimpses, dynamic_size=False, name='done'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='exp_exp_obs'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='exp_obs'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='H_exp_exp_obs'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='exp_H'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='potential_actions'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='belief_loss'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='z_post'))
-        out_ta.append(tf.TensorArray(tf.int32, size=FLAGS.num_glimpses, dynamic_size=False, name='selected_action_idx'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='rewards_Gobs'))
-
-        ta_d = {}
-        for i, ta in enumerate(out_ta):
-            ta_d[ta.handle.name.split('/')[-1].replace(':0', '')] = ta
+        # variables to remember
+        ta_d = self._create_ta([('obs', tf.float32, FLAGS.num_glimpses),
+                                ('nll_posterior', tf.float32, FLAGS.num_glimpses),
+                                ('reconstr_posterior', tf.float32, FLAGS.num_glimpses),
+                                ('KLdivs', tf.float32, FLAGS.num_glimpses),
+                                ('G', tf.float32, FLAGS.num_glimpses),
+                                ('actions', tf.float32, FLAGS.num_glimpses),
+                                ('actions_mean', tf.float32, FLAGS.num_glimpses),
+                                ('selected_exp_obs_enc', tf.int32, FLAGS.num_glimpses),
+                                ('current_s', tf.float32, FLAGS.num_glimpses),
+                                ('decisions', tf.int32, FLAGS.num_glimpses),
+                                ('rewards', tf.float32, FLAGS.num_glimpses),
+                                ('baselines', tf.float32, FLAGS.num_glimpses),
+                                ('fb', tf.float32, FLAGS.num_glimpses),
+                                ('bl_surprise', tf.float32, FLAGS.num_glimpses),
+                                ('done', tf.bool, FLAGS.num_glimpses),
+                                ('exp_exp_obs', tf.float32, FLAGS.num_glimpses),
+                                ('exp_obs', tf.float32, FLAGS.num_glimpses),
+                                ('H_exp_exp_obs', tf.float32, FLAGS.num_glimpses),
+                                ('exp_H', tf.float32, FLAGS.num_glimpses),
+                                ('potential_actions', tf.float32, FLAGS.num_glimpses),
+                                ('belief_loss', tf.float32, FLAGS.num_glimpses),
+                                ('z_post', tf.float32, FLAGS.num_glimpses),
+                                ('selected_action_idx', tf.int32, FLAGS.num_glimpses),
+                                ('rewards_Gobs', tf.float32, FLAGS.num_glimpses),
+                                ('current_c', tf.float32, FLAGS.num_glimpses + 1),
+                                ('uk_belief', tf.float32, FLAGS.num_glimpses + 1),
+                                ])
 
         # Initial values
         last_done = tf.zeros([self.B], dtype=tf.bool)
         last_decision = tf.fill([self.B], -1)
         last_state = stateTransition.initial_state(self.B)
-        ta_d['current_c'] = self._write_zero_out(0, ta_d['current_c'], last_state['c'], last_done, 'current_c')
-        ta_d['uk_belief'] = self._write_zero_out(0, ta_d['uk_belief'], last_state['uk_belief'], last_done, 'uk_belief')
+
+        ta_d['current_c'] = ta_d['current_c'].write(0, last_state['c'])
+        ta_d['uk_belief'] = ta_d['uk_belief'].write(0, last_state['uk_belief'])
 
         with tf.name_scope('Main_loop'):
             for time in range(FLAGS.num_glimpses):
@@ -144,20 +141,25 @@ class predRSSM(base.Base):
                 current_state, z_post, nll_post, reconstr_posterior, KLdivs, belief_loss, bl_surprise = beliefUpdate.update(last_state, next_action, observation, next_exp_obs, time, newly_done)
                 current_state = stateTransition([z_post['mu'], next_action, glimpse_idx], current_state)
                 # t=0 to T-1
-                ta_d['obs']                      = self._write_zero_out(time, ta_d['obs'], observation, done, 'obs')
-                ta_d['KLdivs']                   = self._write_zero_out(time, ta_d['KLdivs'], KLdivs, done, 'KLdivs')  # [B, hyp]
-                ta_d['nll_posterior']            = self._write_zero_out(time, ta_d['nll_posterior'], nll_post, done, 'nll_posterior')  # [B, n_policies]
-                ta_d['z_post']                   = self._write_zero_out(time, ta_d['z_post'], z_post['sample'], done, 'z_post')
-                ta_d['reconstr_posterior']       = self._write_zero_out(time, ta_d['reconstr_posterior'], reconstr_posterior, done, 'reconstr_posterior')  # for visualisation only
-                ta_d['actions']                  = self._write_zero_out(time, ta_d['actions'], next_action, done, 'actions')  # location actions, not including the decision acions
-                ta_d['actions_mean']             = self._write_zero_out(time, ta_d['actions_mean'], next_action_mean, done, 'actions_mean')  # location actions, not including the decision acions
+                for name, var in [('obs', observation),
+                                  ('KLdivs', KLdivs),
+                                  ('nll_posterior', nll_post),
+                                  ('z_post', z_post['sample']),
+                                  ('reconstr_posterior', reconstr_posterior),
+                                  ('actions', next_action),
+                                  ('actions_mean', next_action_mean),
+                                  # FOR BERNOULLI THIS HAS TO BE THE SAMPLE (MEAN IS THE UN-TRANSFORMED LOGITS), BUT FOR NORMAL DIST MIGHT WANT TO USE THE MEAN INSTEAD
+                                  ('selected_exp_obs_enc', next_exp_obs['sample']),
+                                  ('current_s', current_state['s']),
+                                  ('fb', current_state['fb']),
+                                  ('bl_surprise', bl_surprise),
+                                  ('belief_loss', belief_loss),
+                                  ('baselines', baseline),
+                                  ('rewards', corr_classification_fb),
+                                  ]:
+                    ta_d[name] = self._write_zero_out(time, ta_d[name], var, done, name)
+
                 # FOR BERNOULLI THIS HAS TO BE THE SAMPLE (MEAN IS THE UN-TRANSFORMED LOGITS), BUT FOR NORMAL DIST MIGHT WANT TO USE THE MEAN INSTEAD
-                ta_d['selected_exp_obs_enc']     = self._write_zero_out(time, ta_d['selected_exp_obs_enc'], next_exp_obs['sample'], done, 'selected_exp_obs_enc')
-                ta_d['current_s']                = self._write_zero_out(time, ta_d['current_s'], current_state['s'], done, 'current_s')  # [B, rnn]
-                ta_d['fb']                       = self._write_zero_out(time, ta_d['fb'], current_state['fb'], done, 'fb')  # [B, num_classes]
-                ta_d['bl_surprise']              = self._write_zero_out(time, ta_d['bl_surprise'], bl_surprise, done, 'bl_surprise')  # [B]
-                ta_d['belief_loss']              = self._write_zero_out(time, ta_d['belief_loss'], belief_loss, done, 'belief_loss')
-                ta_d['done']                     = ta_d['done'].write(time, done)
                 for k, v in pl_records.items():
                     if FLAGS.debug: print(time, k, v.shape)
                     ta_d[k] = self._write_zero_out(time, ta_d[k], v, done, k)
@@ -165,18 +167,18 @@ class predRSSM(base.Base):
                 ta_d['current_c'] = self._write_zero_out(time + 1, ta_d['current_c'], current_state['c'], done, 'current_c')
                 ta_d['uk_belief'] = self._write_zero_out(time + 1, ta_d['uk_belief'], current_state['uk_belief'], done, 'uk_belief')
                 # t=0 to T
-                ta_d['baselines']                = self._write_zero_out(time, ta_d['baselines'], baseline, last_done, 'baselines')  # this baseline is taken before the decision/observation! Same indexed rewards are taken after!
-                ta_d['rewards']                  = self._write_zero_out(time, ta_d['rewards'], corr_classification_fb, last_done, 'rewards')
-                # copy forward
-                classification_decision = tf.where(last_done, last_decision, next_decision)
-                last_decision = tf.where(last_done, last_decision, next_decision)
+                ta_d['baselines'] = self._write_zero_out(time, ta_d['baselines'], baseline, last_done, 'baselines')  # this baseline is taken before the decision/observation! Same indexed rewards are taken after!
+                ta_d['rewards']   = self._write_zero_out(time, ta_d['rewards'], corr_classification_fb, last_done, 'rewards')
                 ta_d['decisions'] = ta_d['decisions'].write(time, next_decision)
+                ta_d['done']      = ta_d['done'].write(time, done)
+                # copy forward
+                self.classification = tf.where(last_done, last_decision, next_decision)
+                last_decision = tf.where(last_done, last_decision, next_decision)
                 # pass on to next time step
                 last_done = done
                 last_state = current_state
 
                 # TODO: break loop if tf.reduce_all(last_done) (requires tf.while loop)
-                time += 1
 
         with tf.name_scope('Stacking'):
             self.obs = ta_d['obs'].stack()  # [T,B,glimpse]
@@ -236,11 +238,6 @@ class predRSSM(base.Base):
                 # baseline is calculated before taking a new obs, rewards with same index thereafter
                 baseline_mse = tf.reduce_mean(tf.reduce_sum(tf.square(tf.stop_gradient(returns) - bl_loc), axis=0))
 
-            with tf.name_scope('Classification'):
-                # might never make a classification decision
-                # TODO: SHOULD I FORCE THE ACTION AT t=t TO BE A CLASSIFICATION?
-                self.classification = classification_decision
-
             with tf.name_scope('VAE'):
                 correct_hypoths = tf.cast(tf.one_hot(env.y_MC, depth=FLAGS.num_classes_kn), tf.bool)  # [B, hyp]
 
@@ -295,7 +292,7 @@ class predRSSM(base.Base):
             def drop_vars(collection, to_drop):
                 return list(set(collection) - set(to_drop))
 
-            if (policy == 'random') or (FLAGS.actInfPolicy in ['random', 'uniform_loc10']):  # don't train locationNet or location baseline
+            if (policy == 'random') or (FLAGS.actInfPolicy in ['random', 'uniformLoc10']):  # don't train locationNet or location baseline
                 pretrain_vars = (tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=VAEencoder.name)
                                  + tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=VAEdecoder.name)
                                  + stateTransition._cell.trainable_variables
@@ -328,7 +325,7 @@ class predRSSM(base.Base):
         with tf.name_scope('Summaries'):
             metrics_upd_coll = "streaming_updates"
 
-            self.acc = tf.reduce_mean(tf.cast(tf.equal(self.y_MC, classification_decision), tf.float32))  # only to get easy direct intermendiate outputs
+            self.acc = tf.reduce_mean(tf.cast(tf.equal(self.y_MC, self.classification), tf.float32))  # only to get easy direct intermendiate outputs
             self.avg_G = tf.reduce_mean(self.G, axis=[1])  # [T, n_policies]
 
             fb_ratio_bestWrong_corr_ts_seen = []
@@ -358,7 +355,7 @@ class predRSSM(base.Base):
                        'loss/RL_returns': tf.reduce_mean(returns),
                        'loss/BU_loss': beliefUpdate_loss,
                        'loss/BU_surpiseBL_mse': bl_surpise_mse,
-                       'misc/pct_noDecision': tf.count_nonzero(tf.equal(classification_decision, -1), dtype=tf.float32) / tf.cast(self.B, tf.float32),
+                       'misc/pct_noDecision': tf.count_nonzero(tf.equal(self.classification, -1), dtype=tf.float32) / tf.cast(self.B, tf.float32),
                        'misc/T': self.avg_T,
                        }
             for t in range(FLAGS.num_glimpses):
@@ -369,18 +366,10 @@ class predRSSM(base.Base):
                 # would expect this to get better over time as predictions are built upon more information (min over hypotheses). Though might be influenced by loc policy if not random
                 scalars['misc/bestKLdiv_t{}'.format(t)] = tf.reduce_mean(tf.reduce_min(self.KLdivs[t], axis=-1))
 
-            if FLAGS.uk_label:
-                corr = tf.equal(self.y_MC, classification_decision)
-                is_uk = tf.equal(self.y_MC, FLAGS.uk_label)
-                corr_kn, corr_uk = tf.dynamic_partition(corr, partitions=tf.cast(is_uk, tf.int32), num_partitions=2)
-                self.acc_kn = tf.reduce_mean(tf.cast(corr_kn, tf.float32))
-                self.acc_uk = tf.reduce_mean(tf.cast(corr_uk, tf.float32))  # can be nan if there are no uks
-                share_clf_uk = tf.reduce_mean(tf.cast(tf.equal(classification_decision, FLAGS.uk_label), tf.float32))
-                scalars['uk/acc_kn'] = self.acc_kn
-                scalars['uk/acc_uk'] = self.acc_uk
-                scalars['uk/share_clf_uk'] = share_clf_uk
-            else:
-                self.acc_kn, self.acc_uk, share_clf_uk = tf.constant(0.), tf.constant(0.), tf.constant(0.)
+            self.acc_kn, self.acc_uk, share_clf_uk = self._known_unknown_accuracy(FLAGS, self.classification)
+            scalars['uk/acc_kn'] = self.acc_kn
+            scalars['uk/acc_uk'] = self.acc_uk
+            scalars['uk/share_clf_uk'] = share_clf_uk
 
             for name, scalar in scalars.items():
                 tf.summary.scalar(name, scalar)

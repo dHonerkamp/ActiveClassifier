@@ -71,6 +71,23 @@ class Base:
             ta = ta.write(time, tf.where(done, tf.zeros_like(candidate), candidate))
         return ta
 
+    @staticmethod
+    def _create_ta(records):
+        """records: [(name, type)]"""
+        return {name: tf.TensorArray(type, size=size, dynamic_size=False, name=name) for name, type, size in records}
+
+    def _known_unknown_accuracy(self, FLAGS, classification):
+        if FLAGS.uk_label:
+            corr = tf.equal(self.y_MC, classification)
+            is_uk = tf.equal(self.y_MC, FLAGS.uk_label)
+            corr_kn, corr_uk = tf.dynamic_partition(corr, partitions=tf.cast(is_uk, tf.int32), num_partitions=2)
+            acc_kn = tf.reduce_mean(tf.cast(corr_kn, tf.float32))
+            acc_uk = tf.reduce_mean(tf.cast(corr_uk, tf.float32))  # can be nan if there are no uks
+            share_clf_uk = tf.reduce_mean(tf.cast(tf.equal(classification, FLAGS.uk_label), tf.float32))
+        else:
+            acc_kn, acc_uk, share_clf_uk = tf.constant(0.), tf.constant(0.), tf.constant(0.)
+        return acc_kn, acc_uk, share_clf_uk
+
     def _create_saver(self, phase):
         return tf.train.Saver(tf.global_variables(), max_to_keep=1, name='Saver_' + phase['name'])  # tf.trainable_variables() for smaller cp
 

@@ -46,34 +46,29 @@ class fullImgPred(base.Base):
 
         fc_baseline = tf.layers.Dense(10, name='fc_baseline') if FLAGS.rl_reward == 'G' else tf.layers.Dense(1, name='fc_baseline')
 
-
         # self.n_policies = planner.n_policies
 
-        # variables to remember. Probably to be implemented via TensorArray
-        out_ta = []
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='obs'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='reconstr'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='nll'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='KLdivs'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='G'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='actions'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='current_s'))
-        out_ta.append(tf.TensorArray(tf.int32,   size=FLAGS.num_glimpses, dynamic_size=False, name='decisions'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='rewards'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='baselines'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses+1, dynamic_size=False, name='current_c'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses+1, dynamic_size=False, name='uk_belief'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='fb'))
-        # out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='bl_surprise'))
-        out_ta.append(tf.TensorArray(tf.bool,    size=FLAGS.num_glimpses, dynamic_size=False, name='done'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='exp_exp_obs'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='H_exp_exp_obs'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='exp_H'))
-        out_ta.append(tf.TensorArray(tf.float32, size=FLAGS.num_glimpses, dynamic_size=False, name='belief_loss'))
-
-        ta_d = {}
-        for i, ta in enumerate(out_ta):
-            ta_d[ta.handle.name.split('/')[-1].replace(':0', '')] = ta
+        # variables to remember
+        ta_d = self._create_ta([('obs', tf.float32, FLAGS.num_glimpses),
+                                ('reconstr', tf.float32, FLAGS.num_glimpses),
+                                ('nll', tf.float32, FLAGS.num_glimpses),
+                                ('KLdivs', tf.float32, FLAGS.num_glimpses),
+                                ('G', tf.float32, FLAGS.num_glimpses),
+                                ('actions', tf.float32, FLAGS.num_glimpses),
+                                ('current_s', tf.float32, FLAGS.num_glimpses),
+                                ('decisions', tf.int32, FLAGS.num_glimpses),
+                                ('rewards', tf.float32, FLAGS.num_glimpses),
+                                ('baselines', tf.float32, FLAGS.num_glimpses),
+                                ('fb', tf.float32, FLAGS.num_glimpses),
+                                # ('bl_surprise', tf.int32, FLAGS.num_glimpses),
+                                ('done', tf.bool, FLAGS.num_glimpses),
+                                ('exp_exp_obs', tf.int32, FLAGS.num_glimpses),
+                                ('H_exp_exp_obs', tf.int32, FLAGS.num_glimpses),
+                                ('exp_H', tf.int32, FLAGS.num_glimpses),
+                                ('belief_loss', tf.int32, FLAGS.num_glimpses),
+                                ('current_c', tf.float32, FLAGS.num_glimpses + 1),
+                                ('uk_belief', tf.float32, FLAGS.num_glimpses + 1),
+                                ])
 
         # Initial values
         last_done = tf.zeros([self.B], dtype=tf.bool)
@@ -81,6 +76,9 @@ class fullImgPred(base.Base):
         last_state = stateTransition.initial_state
         generatorZero = generatorNet.zero_state
         prior_h, prior_z = generatorZero['h'], generatorZero['z']
+
+        ta_d['current_c'] = ta_d['current_c'].write(0, last_state['c'])
+        ta_d['uk_belief'] = ta_d['uk_belief'].write(0, last_state['uk_belief'])
 
         with tf.name_scope('Main_loop'):
             for time in range(FLAGS.num_glimpses):
@@ -99,39 +97,39 @@ class fullImgPred(base.Base):
                 done = tf.logical_or(last_done, done)
                 current_state = stateTransition(observation, next_action, last_state, VAE_results['KLdiv'], time, newly_done)
                 # t=0 to T-1
-                ta_d['obs']                      = self._write_zero_out(time, ta_d['obs'], observation, done, 'obs')
-                ta_d['reconstr']                 = self._write_zero_out(time, ta_d['reconstr'], next_exp_obs['mu_probs'], done, 'reconstr')  # for visualisation only
-                ta_d['actions']                  = self._write_zero_out(time, ta_d['actions'], next_action, done, 'actions')  # location actions, not including the decision acions
-                # FOR BERNOULLI THIS HAS TO BE THE SAMPLE (MEAN IS THE UN-TRANSFORMED LOGITS), BUT FOR NORMAL DIST MIGHT WANT TO USE THE MEAN INSTEAD
-                ta_d['current_s']                = self._write_zero_out(time, ta_d['current_s'], current_state['s'], done, 'current_s')  # [B, rnn]
-                ta_d['fb']                       = self._write_zero_out(time, ta_d['fb'], current_state['fb'], done, 'fb')  # [B, num_classes]
-                # ta_d['bl_surprise']              = self._write_zero_out(time, ta_d['bl_surprise'], bl_surprise, done, 'bl_surprise')  # [B]
-                ta_d['done']                     = ta_d['done'].write(time, done)
-                # t=0/1 to T
-                ta_d['baselines']                = self._write_zero_out(time, ta_d['baselines'], baseline, last_done, 'baselines')  # this baseline is taken before the decision/observation! Same indexed rewards are taken after!
-                ta_d['rewards']                  = self._write_zero_out(time, ta_d['rewards'], corr_classification_fb, last_done, 'rewards')
-                # ta_d['belief_loss']              = self._write_zero_out(time, ta_d['belief_loss'], belief_loss, last_done, 'belief_loss')
+                for name, var in [('obs', observation),
+                                  ('reconstr', next_exp_obs['mu_probs']),
+                                  ('actions', next_action),
+                                  # FOR BERNOULLI THIS HAS TO BE THE SAMPLE (MEAN IS THE UN-TRANSFORMED LOGITS), BUT FOR NORMAL DIST MIGHT WANT TO USE THE MEAN INSTEAD
+                                  ('current_s', current_state['s']),
+                                  ('fb', current_state['fb']),
+                                  # ('bl_surprise', bl_surprise),
+                                  ('baselines', baseline),
+                                  ('rewards', corr_classification_fb),
+                                  # ('belief_loss', belief_loss),
+                                  ]:
+                    ta_d[name] = self._write_zero_out(time, ta_d[name], var, done, name)
                 for k, v in pl_records.items():
                     if FLAGS.debug: print(time, k, v.shape)
                     ta_d[k] = self._write_zero_out(time, ta_d[k], v, done, k)
                 # t=0 to T
-                ta_d['current_c'] = self._write_zero_out(time + 1, ta_d['current_c'], current_state['c'], done, 'current_c')  # ONLY ONE t=0 TO T
+                ta_d['current_c'] = self._write_zero_out(time + 1, ta_d['current_c'], current_state['c'], done, 'current_c')
                 ta_d['uk_belief'] = self._write_zero_out(time + 1, ta_d['uk_belief'], current_state['uk_belief'], done, 'uk_belief')
                 # TODO: SHOULD THESE BE done INSTEAD OF last_done??
                 ta_d['KLdivs'] = self._write_zero_out(time, ta_d['KLdivs'], VAE_results['KLdiv'], last_done, 'KLdivs')  # [B, hyp]
                 ta_d['nll'] = self._write_zero_out(time, ta_d['nll'], VAE_results['nll'], last_done, 'nll')  # [B, n_policies]
-                # copy forward
-                classification_decision = tf.where(last_done, last_decision, next_decision)
-                last_decision = tf.where(last_done, last_decision, next_decision)
                 ta_d['decisions'] = ta_d['decisions'].write(time, next_decision)
+                ta_d['done'] = ta_d['done'].write(time, done)
+
+                # copy forward
+                self.classification = tf.where(last_done, last_decision, next_decision)
+                last_decision = tf.where(last_done, last_decision, next_decision)
                 # pass on to next time step
                 last_done = done
                 prior_h = VAE_results['h']
                 prior_z = VAE_results['z']
                 last_state = current_state
-
                 # TODO: break loop if tf.reduce_all(last_done) (requires tf.while loop)
-                time += 1
 
         with tf.name_scope('Stacking'):
             self.obs = ta_d['obs'].stack()  # [T,B,glimpse]
@@ -175,11 +173,6 @@ class fullImgPred(base.Base):
                 returns = tf.cumsum(rewards, reverse=True, axis=0)
                 # baseline is calculated before taking a new obs, rewards with same index thereafter
                 baseline_mse = tf.reduce_mean(tf.reduce_sum(tf.square(tf.stop_gradient(returns) - bl_loc), axis=0))
-
-            with tf.name_scope('Classification'):
-                # might never make a classification decision
-                # TODO: SHOULD I FORCE THE ACTION AT t=t TO BE A CLASSIFICATION?
-                self.classification = classification_decision
 
             with tf.name_scope('VAE'):
                 correct_hypoths = tf.cast(tf.one_hot(env.y_MC, depth=FLAGS.num_classes_kn), tf.bool)  # [B, hyp]
@@ -251,7 +244,7 @@ class fullImgPred(base.Base):
         with tf.name_scope('Summaries'):
             metrics_upd_coll = "streaming_updates"
 
-            self.acc = tf.reduce_mean(tf.cast(tf.equal(self.y_MC, classification_decision), tf.float32))  # only to get easy direct intermendiate outputs
+            self.acc = tf.reduce_mean(tf.cast(tf.equal(self.y_MC, self.classification), tf.float32))  # only to get easy direct intermediate outputs
             self.avg_G = tf.reduce_mean(self.G, axis=[1])  # [T, n_policies]
 
             fb_ratio_bestWrong_corr_ts_seen = []
@@ -280,7 +273,7 @@ class fullImgPred(base.Base):
                        'loss/RL_returns': tf.reduce_mean(returns),
                        'loss/BU_loss': beliefUpdate_loss,
                        'loss/BU_surpiseBL_mse': bl_surpise_mse,
-                       'misc/pct_noDecision': tf.count_nonzero(tf.equal(classification_decision, -1), dtype=tf.float32) / tf.cast(self.B, tf.float32),
+                       'misc/pct_noDecision': tf.count_nonzero(tf.equal(self.classification, -1), dtype=tf.float32) / tf.cast(self.B, tf.float32),
                        'misc/T': self.avg_T,
                        }
             for t in range(FLAGS.num_glimpses):
@@ -291,18 +284,10 @@ class fullImgPred(base.Base):
                 # would expect this to get better over time as predictions are built upon more information (min over hypotheses). Though might be influenced by loc policy if not random
                 scalars['misc/bestKLdiv_t{}'.format(t)] = tf.reduce_mean(tf.reduce_min(self.KLdivs[t], axis=-1))
 
-            if FLAGS.uk_label:
-                corr = tf.equal(self.y_MC, classification_decision)
-                is_uk = tf.equal(self.y_MC, FLAGS.uk_label)
-                corr_kn, corr_uk = tf.dynamic_partition(corr, partitions=tf.cast(is_uk, tf.int32), num_partitions=2)
-                self.acc_kn = tf.reduce_mean(tf.cast(corr_kn, tf.float32))
-                self.acc_uk = tf.reduce_mean(tf.cast(corr_uk, tf.float32))  # can be nan if there are no uks
-                share_clf_uk = tf.reduce_mean(tf.cast(tf.equal(classification_decision, FLAGS.uk_label), tf.float32))
-                scalars['uk/acc_kn'] = self.acc_kn
-                scalars['uk/acc_uk'] = self.acc_uk
-                scalars['uk/share_clf_uk'] = share_clf_uk
-            else:
-                self.acc_kn, self.acc_uk, share_clf_uk = tf.constant(0.), tf.constant(0.), tf.constant(0.)
+            self.acc_kn, self.acc_uk, share_clf_uk = self._known_unknown_accuracy(FLAGS, self.classification)
+            scalars['uk/acc_kn'] = self.acc_kn
+            scalars['uk/acc_uk'] = self.acc_uk
+            scalars['uk/share_clf_uk'] = share_clf_uk
 
             for name, scalar in scalars.items():
                 tf.summary.scalar(name, scalar)

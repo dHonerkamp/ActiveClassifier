@@ -35,7 +35,7 @@ class BasePlanner:
     @staticmethod
     def _hyp_tiling(n_classes, n_tiles):
         one_hot = tf.one_hot(tf.range(n_classes), depth=n_classes)  # [n_classes, n_classes]
-        return tf.tile(one_hot, [n_tiles, 1])  # [B*n_tiles, n_classes]
+        return tf.tile(one_hot, [n_tiles, 1])  # [n_tiles*n_classes, n_classes]
 
     def single_policy_prediction(self, state, next_action):
         hyp = self._hyp_tiling(n_classes=self.num_classes_kn, n_tiles=self.B * 1)  # [B * 1 * n_classes_kn, n_classes_kn]

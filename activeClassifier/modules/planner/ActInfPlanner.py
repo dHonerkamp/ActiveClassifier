@@ -93,8 +93,8 @@ class ActInfPlanner(BasePlanner):
         return dec_G
 
     def _action_selection(self, next_actions, next_actions_mean, new_state, G, exp_obs_prior, time, is_training):
-        # TODO: should uniform_loc10 take random decisions or not?
-        if self.actInfPolicy in ['random', 'uniform_loc10']:
+        # TODO: should uniformLoc10 take random decisions or not?
+        if self.actInfPolicy in ['random', 'uniformLoc10']:
             selected_action_idx = tf.random_uniform(shape=[self.B], minval=0, maxval=self.n_policies, dtype=tf.int32)
             if time < (self.num_glimpses - 1):
                 decision = tf.fill([self.B], -1)
@@ -138,7 +138,7 @@ class ActInfPlanner(BasePlanner):
         return decision, selected_action, selected_action_mean, selected_exp_obs, selected_action_idx
 
     def _location_planning(self, inputs, is_training, rnd_loc_eval):
-        if self.actInfPolicy == 'uniform_loc10':
+        if self.actInfPolicy == 'uniformLoc10':
             next_actions, next_actions_mean = self.m['policyNet'].uniform_loc_10(self.n_policies)
         elif self.actInfPolicy == "random":
             next_actions, next_actions_mean = self.m['policyNet'].random_loc(shp=[self.B, self.n_policies])
